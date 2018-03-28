@@ -86,7 +86,7 @@ module.exports = async (browser, options) => {
   }
 
   function hasReachedUserRateLimit() {
-    return getFollowedUsersThisTimeUnit().length > maxFollowsPerTimeUnit;
+    return getFollowedUsersThisTimeUnit().length >= maxFollowsPerTimeUnit;
   }
 
   function haveRecentlyFollowedUser(username) {
