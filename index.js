@@ -14,8 +14,8 @@ module.exports = async (browser, options) => {
 
     maxFollowsPerUser = 5,
 
-    maxFollowsPerTime = 50,
-    maxFollowsPerTimeSpan = 60 * 60 * 1000,
+    maxFollowsPerTimeUnit = 100,
+    maxFollowsPerTimeSpan = 24 * 60 * 60 * 1000,
     followUserRatioMin = 0.4,
     followUserRatioMax = 1.3,
 
@@ -84,7 +84,7 @@ module.exports = async (browser, options) => {
     const followedUsersSinceTime = followedUsers
       .filter(u => new Date().getTime() - u.time < maxFollowsPerTimeSpan);
 
-    return followedUsersSinceTime.length > maxFollowsPerTime;
+    return followedUsersSinceTime.length > maxFollowsPerTimeUnit;
   }
 
   function haveRecentlyFollowedUser(username) {
