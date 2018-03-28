@@ -80,11 +80,13 @@ module.exports = async (browser, options) => {
     await trySaveFollowedDb();
   }
 
-  function hasReachedUserRateLimit() {
-    const followedUsersSinceTime = followedUsers
+  function getFollowedUsersThisTimeUnit() {
+    return followedUsers
       .filter(u => new Date().getTime() - u.time < maxFollowsPerTimeSpan);
+  }
 
-    return followedUsersSinceTime.length > maxFollowsPerTimeUnit;
+  function hasReachedUserRateLimit() {
+    return getFollowedUsersThisTimeUnit().length > maxFollowsPerTimeUnit;
   }
 
   function haveRecentlyFollowedUser(username) {
@@ -308,6 +310,7 @@ module.exports = async (browser, options) => {
 
   await trySaveCookies();
 
+  console.log(`Have followed ${getFollowedUsersThisTimeUnit().length} in the last ${maxFollowsPerTimeSpan / (60 * 60 * 1000)} hours`);
 
   return {
     followUserFollowers,
