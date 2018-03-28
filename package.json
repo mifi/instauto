@@ -1,6 +1,6 @@
 {
-  "name": "insta-js",
-  "version": "1.0.0",
+  "name": "instauto",
+  "version": "1.0.1",
   "description": "Instagram automation library written in Node.js",
   "main": "index.js",
   "scripts": {
@@ -8,7 +8,7 @@
     "test": "exit 0"
   },
   "author": "Mikael Finstad <finstaden@gmail.com>",
-  "repository": "mifi/insta-js",
+  "repository": "mifi/instauto",
   "license": "MIT",
   "engines": {
     "node": ">=8"

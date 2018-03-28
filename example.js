@@ -2,7 +2,7 @@
 
 const puppeteer = require('puppeteer'); // eslint-disable-line import/no-extraneous-dependencies
 
-const InstaJs = require('insta-js'); // eslint-disable-line import/no-unresolved
+const Instauto = require('instauto'); // eslint-disable-line import/no-unresolved
 
 const options = {
   cookiesPath: './cookies.json',
@@ -25,7 +25,7 @@ const options = {
   try {
     browser = await puppeteer.launch({ headless: false });
 
-    const instaJs = await InstaJs(browser, options);
+    const instaJs = await Instauto(browser, options);
 
     // List of usernames that we should follow the followers of, can be celebrities etc.
     const usersToFollowFollowersOf = ['lostleblanc', 'sam_kolder'];

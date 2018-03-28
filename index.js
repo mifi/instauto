@@ -89,7 +89,7 @@ module.exports = async (browser, options) => {
 
   function haveRecentlyFollowedUser(username) {
     const followedUserEntry = followedUsers.find(u => u.username === username);
-    if (!followedUserEntry) return false; // insta-js did not follow this user, so don't know
+    if (!followedUserEntry) return false; // We did not previously follow this user, so don't know
     return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimespan;
   }
 
