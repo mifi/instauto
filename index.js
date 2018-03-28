@@ -160,7 +160,7 @@ module.exports = async (browser, options) => {
     for (const follower of list) {
       try {
         if (hasReachedUserRateLimit() || numFollowedForThisUser >= maxFollowsPerUser) {
-          console.log('Have reached user limit, stopping');
+          console.log('Have reached user rate limit, stopping');
           return;
         }
 

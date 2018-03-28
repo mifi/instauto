@@ -1,7 +1,7 @@
 {
   "name": "insta-js",
   "version": "1.0.0",
-  "description": "Instagram automation library",
+  "description": "Instagram automation library written in Node.js",
   "main": "index.js",
   "scripts": {
     "lint": "eslint .",
