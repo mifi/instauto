@@ -1,0 +1,28 @@
+{
+  "name": "insta-js",
+  "version": "1.0.0",
+  "description": "Instagram automation library",
+  "main": "index.js",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Mikael Finstad <finstaden@gmail.com>",
+  "repository": "mifi/insta-js",
+  "license": "MIT",
+  "engines": {
+    "node": ">=8"
+  },
+  "files": [
+    "index.js"
+  ],
+  "dependencies": {
+    "fs-extra": "^5.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^4.19.1",
+    "eslint-config-airbnb": "^16.1.0",
+    "eslint-plugin-import": "^2.9.0",
+    "puppeteer": "^1.2.0"
+  }
+}
