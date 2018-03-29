@@ -85,7 +85,7 @@ module.exports = async (browser, options) => {
       .filter(u => new Date().getTime() - u.time < maxFollowsPerTimeSpan);
   }
 
-  function hasReachedUserRateLimit() {
+  function hasReachedFollowedUserRateLimit() {
     return getFollowedUsersThisTimeUnit().length >= maxFollowsPerTimeUnit;
   }
 
@@ -143,26 +143,33 @@ module.exports = async (browser, options) => {
   }
 
   async function followUserFollowers(username) {
+    if (hasReachedFollowedUserRateLimit()) {
+      console.log('Have reached follow rate limit, stopping');
+      return;
+    }
+
+    console.log(`Following the followers of ${username}`);
+
     let numFollowedForThisUser = 0;
 
     await navigateToUser(username);
     await openFollowersList(username);
 
     const handles = await page.$x("//div[./text()='Followers']/following-sibling::*[1]/*/*/*/*/*/*[position()=2]//a");
-    let list = [];
+    let followers = [];
 
     for (const handle of handles) {
       const follower = await page.evaluate(e => e.innerText, handle);
-      list.push(follower);
+      followers.push(follower);
     }
-    console.log('followers', list);
+    console.log('Followers', followers);
 
-    list = list.filter(f => !followedUsers.find(fu => fu.username === f));
+    followers = followers.filter(f => !followedUsers.find(fu => fu.username === f));
 
-    for (const follower of list) {
+    for (const follower of followers) {
       try {
-        if (hasReachedUserRateLimit() || numFollowedForThisUser >= maxFollowsPerUser) {
-          console.log('Have reached user rate limit, stopping');
+        if (numFollowedForThisUser >= maxFollowsPerUser) {
+          console.log('Have reached followed limit for this user, stopping');
           return;
         }
 

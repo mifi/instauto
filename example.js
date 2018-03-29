@@ -31,7 +31,6 @@ const options = {
     const usersToFollowFollowersOf = ['lostleblanc', 'sam_kolder'];
 
     for (const username of usersToFollowFollowersOf) {
-      console.log(`Following followers of ${username}`);
       await instaJs.followUserFollowers(username);
     }
 
