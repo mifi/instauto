@@ -12,12 +12,10 @@ module.exports = async (browser, options) => {
     username: myUsername,
     password,
 
-    maxFollowsPerUser = 5,
-
     maxFollowsPerTimeUnit = 100,
     maxFollowsPerTimeSpan = 24 * 60 * 60 * 1000,
-    followUserRatioMin = 0.4,
-    followUserRatioMax = 1.3,
+    followUserRatioMin = 0.2,
+    followUserRatioMax = 4.0,
 
     dontUnfollowUntilTimespan = 3 * 24 * 60 * 60 * 1000,
 
@@ -142,7 +140,9 @@ module.exports = async (browser, options) => {
     await sleep(2000);
   }
 
-  async function followUserFollowers(username) {
+  async function followUserFollowers(username, {
+    maxFollowsPerUser = 5, skipPrivate = false,
+  } = {}) {
     if (hasReachedFollowedUserRateLimit()) {
       console.log('Have reached follow rate limit, stopping');
       return;
