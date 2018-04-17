@@ -180,25 +180,24 @@ module.exports = async (browser, options) => {
 
         await navigateToUser(follower);
 
-        const followedByCount = await page.evaluate(() => // eslint-disable-line no-loop-func
-          window._sharedData.entry_data.ProfilePage[0].graphql.user.edge_followed_by.count); // eslint-disable-line no-undef,no-underscore-dangle,max-len
-
-        const followsCount = await page.evaluate(() => // eslint-disable-line no-loop-func
-          window._sharedData.entry_data.ProfilePage[0].graphql.user.edge_follow.count); // eslint-disable-line no-undef,no-underscore-dangle,max-len
+        const graphqlUser = await getCurrentUser();
+        const followedByCount = graphqlUser.edge_followed_by.count;
+        const followsCount = graphqlUser.edge_follow.count;
+        const isPrivate = graphqlUser.is_private;
 
         console.log({ followedByCount, followsCount });
 
         const ratio = followedByCount / (followsCount || 1);
-        if (ratio > followUserRatioMax || ratio < followUserRatioMin) {
+
+        if (isPrivate && skipPrivate) {
+          console.log('User is private, skipping');
+        } else if (ratio > followUserRatioMax || ratio < followUserRatioMin) {
           console.log('User has too many followers compared to follows or opposite, skipping');
         } else {
           await followCurrentUser(follower);
           numFollowedForThisUser += 1;
           await sleep(20000);
         }
-
-        await navigateToUser(username);
-        await openFollowersList(username);
       } catch (err) {
         console.error(`Failed to process follower ${follower}`, err);
         await sleep(20000);
