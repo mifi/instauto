@@ -140,6 +140,11 @@ module.exports = async (browser, options) => {
     await sleep(2000);
   }
 
+  async function getCurrentUser() {
+    return page.evaluate(() => // eslint-disable-line no-loop-func
+      window._sharedData.entry_data.ProfilePage[0].graphql.user); // eslint-disable-line no-undef,no-underscore-dangle,max-len
+  }
+
   async function followUserFollowers(username, {
     maxFollowsPerUser = 5, skipPrivate = false,
   } = {}) {
@@ -243,9 +248,8 @@ module.exports = async (browser, options) => {
 
   async function unfollowNonMutualFollowers() {
     console.log('Unfollowing non-mutual followers...');
-    await page.goto(`${instagramBaseUrl}/${myUsername}/?__a=1`);
-    const json = await getPageJson();
-    const userData = json.graphql.user;
+    await page.goto(`${instagramBaseUrl}/${myUsername}`);
+    const userData = await getCurrentUser();
 
     const allFollowers = await getFollowersOrFollowing({
       userId: userData.id,
