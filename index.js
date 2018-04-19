@@ -211,12 +211,12 @@ module.exports = async (browser, options) => {
 
   async function getFollowersOrFollowing({ userId, getFollowers = false }) {
     const graphqlUrl = `${instagramBaseUrl}/graphql/query`;
-    const followersUrl = `${graphqlUrl}/?query_id=17851374694183129`;
-    const followingUrl = `${graphqlUrl}/?query_id=17874545323001329`;
+    const followersUrl = `${graphqlUrl}/?query_hash=37479f2b8209594dde7facb0d904896a`;
+    const followingUrl = `${graphqlUrl}/?query_hash=58712303d941c6855d4e888c5f0cd22f`;
 
     const graphqlVariables = {
       id: userId,
-      first: 100,
+      first: 50,
     };
 
     const outUsers = [];
@@ -226,6 +226,7 @@ module.exports = async (browser, options) => {
 
     while (hasNextPage) {
       const url = `${getFollowers ? followersUrl : followingUrl}&variables=${JSON.stringify(graphqlVariables)}`;
+      // console.log(url);
       await page.goto(url);
       const json = await getPageJson();
 
