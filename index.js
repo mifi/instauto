@@ -13,11 +13,11 @@ module.exports = async (browser, options) => {
     password,
 
     maxFollowsPerTimeUnit = 100,
-    maxFollowsPerTimeSpan = 24 * 60 * 60 * 1000,
+    maxFollowsTimeUnit = 24 * 60 * 60 * 1000,
     followUserRatioMin = 0.2,
     followUserRatioMax = 4.0,
 
-    dontUnfollowUntilTimespan = 3 * 24 * 60 * 60 * 1000,
+    dontUnfollowUntilTimeElapsed = 3 * 24 * 60 * 60 * 1000,
 
     excludeUsers = [],
 
@@ -80,7 +80,7 @@ module.exports = async (browser, options) => {
 
   function getFollowedUsersThisTimeUnit() {
     return followedUsers
-      .filter(u => new Date().getTime() - u.time < maxFollowsPerTimeSpan);
+      .filter(u => new Date().getTime() - u.time < maxFollowsTimeUnit);
   }
 
   function hasReachedFollowedUserRateLimit() {
@@ -90,7 +90,7 @@ module.exports = async (browser, options) => {
   function haveRecentlyFollowedUser(username) {
     const followedUserEntry = followedUsers.find(u => u.username === username);
     if (!followedUserEntry) return false; // We did not previously follow this user, so don't know
-    return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimespan;
+    return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
   }
 
   async function navigateToUser(username) {
@@ -321,7 +321,7 @@ module.exports = async (browser, options) => {
 
   await trySaveCookies();
 
-  console.log(`Have followed ${getFollowedUsersThisTimeUnit().length} in the last ${maxFollowsPerTimeSpan / (60 * 60 * 1000)} hours`);
+  console.log(`Have followed ${getFollowedUsersThisTimeUnit().length} in the last ${maxFollowsTimeUnit / (60 * 60 * 1000)} hours`);
 
   return {
     followUserFollowers,
