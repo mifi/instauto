@@ -140,9 +140,52 @@ module.exports = async (browser, options) => {
     await sleep(2000);
   }
 
+  async function getPageJson() {
+    return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
+  }
+
   async function getCurrentUser() {
     return page.evaluate(() => // eslint-disable-line no-loop-func
       window._sharedData.entry_data.ProfilePage[0].graphql.user); // eslint-disable-line no-undef,no-underscore-dangle,max-len
+  }
+
+  async function getFollowersOrFollowing({ userId, getFollowers = false, maxPages }) {
+    const graphqlUrl = `${instagramBaseUrl}/graphql/query`;
+    const followersUrl = `${graphqlUrl}/?query_hash=37479f2b8209594dde7facb0d904896a`;
+    const followingUrl = `${graphqlUrl}/?query_hash=58712303d941c6855d4e888c5f0cd22f`;
+
+    const graphqlVariables = {
+      id: userId,
+      first: 50,
+    };
+
+    const outUsers = [];
+
+    let hasNextPage = true;
+    let i = 0;
+
+    const shouldProceed = () => hasNextPage && (maxPages == null || i < maxPages);
+
+    while (shouldProceed()) {
+      const url = `${getFollowers ? followersUrl : followingUrl}&variables=${JSON.stringify(graphqlVariables)}`;
+      // console.log(url);
+      await page.goto(url);
+      const json = await getPageJson();
+
+      const subPropName = getFollowers ? 'edge_followed_by' : 'edge_follow';
+
+      const pageInfo = json.data.user[subPropName].page_info;
+      const { edges } = json.data.user[subPropName];
+
+      edges.forEach(e => outUsers.push(e.node.username));
+
+      graphqlVariables.after = pageInfo.end_cursor;
+      hasNextPage = pageInfo.has_next_page;
+      i += 1;
+      if (shouldProceed()) console.log(`Has more pages (current ${i})`);
+    }
+
+    return outUsers;
   }
 
   async function followUserFollowers(username, {
@@ -158,15 +201,14 @@ module.exports = async (browser, options) => {
     let numFollowedForThisUser = 0;
 
     await navigateToUser(username);
-    await openFollowersList(username);
 
-    const handles = await page.$x("//div[./text()='Followers']/following-sibling::*[1]/*/*/*/*/*/*[position()=2]//a");
-    let followers = [];
+    const userData = await getCurrentUser();
+    let followers = await getFollowersOrFollowing({
+      userId: userData.id,
+      getFollowers: true,
+      maxPages: 1,
+    });
 
-    for (const handle of handles) {
-      const follower = await page.evaluate(e => e.innerText, handle);
-      followers.push(follower);
-    }
     console.log('Followers', followers);
 
     followers = followers.filter(f => !followedUsers.find(fu => fu.username === f));
@@ -203,47 +245,6 @@ module.exports = async (browser, options) => {
         await sleep(20000);
       }
     }
-  }
-
-  async function getPageJson() {
-    return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
-  }
-
-  async function getFollowersOrFollowing({ userId, getFollowers = false }) {
-    const graphqlUrl = `${instagramBaseUrl}/graphql/query`;
-    const followersUrl = `${graphqlUrl}/?query_hash=37479f2b8209594dde7facb0d904896a`;
-    const followingUrl = `${graphqlUrl}/?query_hash=58712303d941c6855d4e888c5f0cd22f`;
-
-    const graphqlVariables = {
-      id: userId,
-      first: 50,
-    };
-
-    const outUsers = [];
-
-    let hasNextPage = true;
-    let i = 0;
-
-    while (hasNextPage) {
-      const url = `${getFollowers ? followersUrl : followingUrl}&variables=${JSON.stringify(graphqlVariables)}`;
-      // console.log(url);
-      await page.goto(url);
-      const json = await getPageJson();
-
-      const subPropName = getFollowers ? 'edge_followed_by' : 'edge_follow';
-
-      const pageInfo = json.data.user[subPropName].page_info;
-      const { edges } = json.data.user[subPropName];
-
-      edges.forEach(e => outUsers.push(e.node.username));
-
-      graphqlVariables.after = pageInfo.end_cursor;
-      hasNextPage = pageInfo.has_next_page;
-      i += 1;
-      if (hasNextPage) console.log(`Has more pages (current ${i})`);
-    }
-
-    return outUsers;
   }
 
   async function unfollowNonMutualFollowers() {
