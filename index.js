@@ -107,6 +107,11 @@ module.exports = async (browser, options) => {
     return elementHandles[0];
   }
 
+  async function findUnfollowConfirmButton() {
+    const elementHandles = await page.$x("//button[text()='Unfollow']");
+    return elementHandles[0];
+  }
+
   // NOTE: assumes we are on this page
   async function followCurrentUser(username) {
     const elementHandle = await findFollowUnfollowButton({ follow: true });
@@ -115,12 +120,17 @@ module.exports = async (browser, options) => {
 
     if (!dryRun) {
       await elementHandle.click();
+      await sleep(5000);
+
+      await findFollowUnfollowButton({ follow: false }); // Check that it has changed value
       await addFollowedUser({ username, time: new Date().getTime() });
     }
 
     await sleep(1000);
   }
 
+  // See https://github.com/timgrossmann/InstaPy/pull/2345
+  // https://github.com/timgrossmann/InstaPy/issues/2355
   async function unfollowCurrentUser(username) {
     const elementHandle = await findFollowUnfollowButton({ follow: false });
 
@@ -128,6 +138,13 @@ module.exports = async (browser, options) => {
 
     if (!dryRun) {
       await elementHandle.click();
+      await sleep(1000);
+      const confirmHandle = await findUnfollowConfirmButton();
+      if (confirmHandle) confirmHandle.click();
+
+      await sleep(5000);
+
+      await findFollowUnfollowButton({ follow: true }); // Check that it has changed value
     }
 
     await sleep(1000);
