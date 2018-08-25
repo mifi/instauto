@@ -117,8 +117,9 @@ module.exports = async (browser, options) => {
 
   async function navigateToUser(username) {
     console.log(`Navigating to user ${username}`);
-    await page.goto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
+    const response = await page.goto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
     await sleep(1000);
+    return response.status === '200';
   }
 
   async function findFollowUnfollowButton({ follow = false }) {
@@ -306,8 +307,12 @@ module.exports = async (browser, options) => {
         await sleep(10 * 60 * 1000, 0.1);
       }
 
-      await navigateToUser(username);
-      await unfollowCurrentUser(username);
+      if (await navigateToUser(username)) {
+        await unfollowCurrentUser(username);
+      } else {
+        // User not found
+        await addUnfollowedUser({ username, time: new Date().getTime() });
+      }
 
       i += 1;
       console.log(`Have now unfollowed ${i} users of total ${usersToUnfollow.length}`);
