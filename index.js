@@ -229,7 +229,10 @@ module.exports = async (browser, options) => {
       graphqlVariables.after = pageInfo.end_cursor;
       hasNextPage = pageInfo.has_next_page;
       i += 1;
-      if (shouldProceed()) console.log(`Has more pages (current ${i})`);
+      if (shouldProceed()) {
+        console.log(`Has more pages (current ${i})`);
+        // await sleep(300);
+      }
     }
 
     return outUsers;
@@ -400,8 +403,8 @@ module.exports = async (browser, options) => {
 
   await trySaveCookies();
 
-  console.log(`Have followed ${getNumFollowedUsersThisTimeUnit(60 * 60 * 1000)} in the last hour`);
-  console.log(`Have followed ${getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000)} in the last 24 hours`);
+  console.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(60 * 60 * 1000)} in the last hour`);
+  console.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000)} in the last 24 hours`);
 
   return {
     followUserFollowers,
