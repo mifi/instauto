@@ -119,7 +119,9 @@ module.exports = async (browser, options) => {
     console.log(`Navigating to user ${username}`);
     const response = await page.goto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
     await sleep(1000);
-    return response.status === '200';
+    const okStatus = response.status === '200';
+    if (!okStatus) console.log(`Navigate to user returned status ${response.status}`);
+    return okStatus;
   }
 
   async function findFollowUnfollowButton({ follow = false }) {
