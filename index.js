@@ -36,13 +36,13 @@ module.exports = async (browser, options) => {
 
   // State
   let page;
-  let followedUsers = [];
+  let followedUsers = {};
   let unfollowedUsers = {};
 
 
   async function tryLoadDb() {
     try {
-      followedUsers = JSON.parse(await fs.readFile(followedDbPath));
+      followedUsers = keyBy(JSON.parse(await fs.readFile(followedDbPath)), 'username');
     } catch (err) {
       console.error('Failed to load followed db');
     }
@@ -55,7 +55,7 @@ module.exports = async (browser, options) => {
 
   async function trySaveDb() {
     try {
-      await fs.writeFile(followedDbPath, JSON.stringify(followedUsers));
+      await fs.writeFile(followedDbPath, JSON.stringify(Object.values(followedUsers)));
       await fs.writeFile(unfollowedDbPath, JSON.stringify(Object.values(unfollowedUsers)));
     } catch (err) {
       console.error('Failed to save db');
@@ -88,7 +88,7 @@ module.exports = async (browser, options) => {
     new Promise(resolve => setTimeout(resolve, ((Math.random() * dev) + 1) * ms));
 
   async function addFollowedUser(user) {
-    followedUsers.push(user);
+    followedUsers[user.username] = user;
     await trySaveDb();
   }
 
@@ -100,7 +100,7 @@ module.exports = async (browser, options) => {
   function getNumFollowedUsersThisTimeUnit(timeUnit) {
     const now = new Date().getTime();
 
-    return followedUsers.filter(u => now - u.time < timeUnit).length
+    return Object.values(followedUsers).filter(u => now - u.time < timeUnit).length
       + Object.values(unfollowedUsers).filter(u => now - u.time < timeUnit).length;
   }
 
@@ -110,7 +110,7 @@ module.exports = async (browser, options) => {
   }
 
   function haveRecentlyFollowedUser(username) {
-    const followedUserEntry = followedUsers.find(u => u.username === username);
+    const followedUserEntry = followedUsers[username];
     if (!followedUserEntry) return false; // We did not previously follow this user, so don't know
     return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
   }
@@ -264,7 +264,7 @@ module.exports = async (browser, options) => {
     console.log('Followers', followers);
 
     // Skip previously followed
-    followers = followers.filter(f => !followedUsers.find(fu => fu.username === f));
+    followers = followers.filter(f => !followedUsers[f]);
 
     for (const follower of followers) {
       try {
@@ -369,7 +369,7 @@ module.exports = async (browser, options) => {
 
     console.log(`Unfollowing auto-followed users more than ${ageInDays} days ago...`);
 
-    const usersToUnfollow = followedUsers.filter(fu =>
+    const usersToUnfollow = Object.values(followedUsers).filter(fu =>
       !unfollowedUsers[fu.username] &&
       (new Date().getTime() - fu.time) / (1000 * 60 * 60 * 24) > ageInDays)
       .slice(0, limit)
@@ -380,13 +380,26 @@ module.exports = async (browser, options) => {
     await safelyUnfollowUserList(usersToUnfollow, limit);
   }
 
+  async function listManuallyFollowedUsers() {
+    await page.goto(`${instagramBaseUrl}/${myUsername}`);
+    const userData = await getCurrentUser();
+
+    const allFollowing = await getFollowersOrFollowing({
+      userId: userData.id,
+      getFollowers: false,
+    });
+
+    return allFollowing.filter(u =>
+      !followedUsers[u] && !excludeUsers.includes(u));
+  }
+
   page = await browser.newPage();
   await page.setUserAgent('Chrome');
 
   await tryLoadCookies();
   await tryLoadDb();
 
-  console.log({ followedUsers });
+  // console.log({ followedUsers });
 
   await page.goto(`${instagramBaseUrl}/`);
   await sleep(1000);
@@ -416,5 +429,6 @@ module.exports = async (browser, options) => {
     unfollowNonMutualFollowers,
     unfollowOldFollowed,
     sleep,
+    listManuallyFollowedUsers,
   };
 };
