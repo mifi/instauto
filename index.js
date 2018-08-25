@@ -347,7 +347,9 @@ module.exports = async (browser, options) => {
 
     const usersToUnfollow = followedUsers.filter(fu =>
       !unfollowedUsers[fu.username] &&
-      (new Date().getTime() - fu.time) / (1000 * 60 * 60 * 24) > ageInDays).slice(0, limit);
+      (new Date().getTime() - fu.time) / (1000 * 60 * 60 * 24) > ageInDays)
+      .slice(0, limit)
+      .map(u => u.username);
 
     console.log({ usersToUnfollow });
 
