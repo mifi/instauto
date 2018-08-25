@@ -124,7 +124,7 @@ module.exports = async (browser, options) => {
   async function findFollowUnfollowButton({ follow = false }) {
     const elementHandles = await page.$x(`//button[text()='${follow ? 'Follow' : 'Following'}']`);
     if (elementHandles.length !== 1) {
-      throw new Error('Follow/unfollow button not found');
+      return undefined;
     }
     return elementHandles[0];
   }
@@ -137,6 +137,7 @@ module.exports = async (browser, options) => {
   // NOTE: assumes we are on this page
   async function followCurrentUser(username) {
     const elementHandle = await findFollowUnfollowButton({ follow: true });
+    if (!elementHandle) throw new Error('Follow button not found');
 
     console.log(`Following user ${username}`);
 
@@ -144,7 +145,9 @@ module.exports = async (browser, options) => {
       await elementHandle.click();
       await sleep(5000);
 
-      await findFollowUnfollowButton({ follow: false }); // Check that it has changed value
+      const elementHandle2 = await findFollowUnfollowButton({ follow: false });
+      if (!elementHandle2) throw new Error('Failed to follow user (not in state followed)');
+
       await addFollowedUser({ username, time: new Date().getTime() });
     }
 
@@ -154,11 +157,17 @@ module.exports = async (browser, options) => {
   // See https://github.com/timgrossmann/InstaPy/pull/2345
   // https://github.com/timgrossmann/InstaPy/issues/2355
   async function unfollowCurrentUser(username) {
-    const elementHandle = await findFollowUnfollowButton({ follow: false });
-
     console.log(`Unfollowing user ${username}`);
 
-    if (!dryRun) {
+    const elementHandle = await findFollowUnfollowButton({ follow: false });
+    if (!elementHandle) {
+      const elementHandle2 = await findFollowUnfollowButton({ follow: true });
+      if (elementHandle2) {
+        console.log('User has been unfollowed already');
+      } else {
+        throw new Error('Failed to find follow/unfollow button');
+      }
+    } else if (!dryRun) {
       await elementHandle.click();
       await sleep(1000);
       const confirmHandle = await findUnfollowConfirmButton();
