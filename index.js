@@ -330,7 +330,7 @@ module.exports = async (browser, options) => {
     }
   }
 
-  async function unfollowNonMutualFollowers({ limit }) {
+  async function unfollowNonMutualFollowers({ limit } = {}) {
     console.log('Unfollowing non-mutual followers...');
     await page.goto(`${instagramBaseUrl}/${myUsername}`);
     const userData = await getCurrentUser();
@@ -361,7 +361,9 @@ module.exports = async (browser, options) => {
     await safelyUnfollowUserList(usersToUnfollow, limit);
   }
 
-  async function unfollowOldFollowed({ ageInDays, limit }) {
+  async function unfollowOldFollowed({ ageInDays, limit } = {}) {
+    assert(ageInDays);
+
     console.log(`Unfollowing auto-followed users more than ${ageInDays} days ago...`);
 
     const usersToUnfollow = followedUsers.filter(fu =>
