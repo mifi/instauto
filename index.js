@@ -149,7 +149,7 @@ module.exports = async (browser, options) => {
       await sleep(5000);
 
       const elementHandle2 = await findFollowUnfollowButton({ follow: false });
-      if (!elementHandle2) throw new Error('Failed to follow user (not in state followed)');
+      if (!elementHandle2) console.log('Failed to follow user (button did not change state)');
 
       await addFollowedUser({ username, time: new Date().getTime() });
     }
@@ -178,7 +178,9 @@ module.exports = async (browser, options) => {
 
       await sleep(5000);
 
-      await findFollowUnfollowButton({ follow: true }); // Check that it has changed value
+      const elementHandle2 = await findFollowUnfollowButton({ follow: true });
+      if (!elementHandle2) console.log('Failed to unfollow user (button did not change state)');
+
       await addUnfollowedUser({ username, time: new Date().getTime() });
     }
 
@@ -261,6 +263,7 @@ module.exports = async (browser, options) => {
 
     console.log('Followers', followers);
 
+    // Skip previously followed
     followers = followers.filter(f => !followedUsers.find(fu => fu.username === f));
 
     for (const follower of followers) {
