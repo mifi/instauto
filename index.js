@@ -2,18 +2,21 @@
 
 const assert = require('assert');
 const fs = require('fs-extra');
+const keyBy = require('lodash/keyBy');
 
 module.exports = async (browser, options) => {
   const {
     instagramBaseUrl = 'https://www.instagram.com',
     cookiesPath,
     followedDbPath,
+    unfollowedDbPath,
 
     username: myUsername,
     password,
 
-    maxFollowsPerTimeUnit = 100,
-    maxFollowsTimeUnit = 24 * 60 * 60 * 1000,
+    maxFollowsPerHour = 100,
+    maxFollowsPerDay = 700,
+
     followUserRatioMin = 0.2,
     followUserRatioMax = 4.0,
 
@@ -27,24 +30,35 @@ module.exports = async (browser, options) => {
   assert(myUsername);
   assert(password);
 
+  assert(cookiesPath);
+  assert(followedDbPath);
+  assert(unfollowedDbPath);
+
   // State
   let page;
   let followedUsers = [];
+  let unfollowedUsers = {};
 
 
-  async function tryLoadFollowedDb() {
+  async function tryLoadDb() {
     try {
       followedUsers = JSON.parse(await fs.readFile(followedDbPath));
     } catch (err) {
       console.error('Failed to load followed db');
     }
+    try {
+      unfollowedUsers = keyBy(JSON.parse(await fs.readFile(unfollowedDbPath)), 'username');
+    } catch (err) {
+      console.error('Failed to load unfollowed db');
+    }
   }
 
-  async function trySaveFollowedDb() {
+  async function trySaveDb() {
     try {
-      await fs.writeFile(followedDbPath, JSON.stringify(followedUsers, null, 2));
+      await fs.writeFile(followedDbPath, JSON.stringify(followedUsers));
+      await fs.writeFile(unfollowedDbPath, JSON.stringify(Object.values(unfollowedUsers)));
     } catch (err) {
-      console.error('Failed to save folowed db');
+      console.error('Failed to save db');
     }
   }
 
@@ -75,16 +89,24 @@ module.exports = async (browser, options) => {
 
   async function addFollowedUser(user) {
     followedUsers.push(user);
-    await trySaveFollowedDb();
+    await trySaveDb();
   }
 
-  function getFollowedUsersThisTimeUnit() {
-    return followedUsers
-      .filter(u => new Date().getTime() - u.time < maxFollowsTimeUnit);
+  async function addUnfollowedUser(user) {
+    unfollowedUsers[user.username] = user;
+    await trySaveDb();
+  }
+
+  function getNumFollowedUsersThisTimeUnit(timeUnit) {
+    const now = new Date().getTime();
+
+    return followedUsers.filter(u => now - u.time < timeUnit).length
+      + Object.values(unfollowedUsers).filter(u => now - u.time < timeUnit).length;
   }
 
   function hasReachedFollowedUserRateLimit() {
-    return getFollowedUsersThisTimeUnit().length >= maxFollowsPerTimeUnit;
+    return getNumFollowedUsersThisTimeUnit(60 * 60 * 1000) >= maxFollowsPerHour
+    || getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000) >= maxFollowsPerDay;
   }
 
   function haveRecentlyFollowedUser(username) {
@@ -145,17 +167,13 @@ module.exports = async (browser, options) => {
       await sleep(5000);
 
       await findFollowUnfollowButton({ follow: true }); // Check that it has changed value
+      await addUnfollowedUser({ username, time: new Date().getTime() });
     }
 
     await sleep(1000);
   }
 
   const isLoggedIn = async () => (await page.$x('//nav')).length === 2;
-
-  async function openFollowersList(username) {
-    await page.click(`a[href="/${encodeURIComponent(username)}/followers/"]`);
-    await sleep(2000);
-  }
 
   async function getPageJson() {
     return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
@@ -209,7 +227,7 @@ module.exports = async (browser, options) => {
     maxFollowsPerUser = 5, skipPrivate = false,
   } = {}) {
     if (hasReachedFollowedUserRateLimit()) {
-      console.log('Have reached follow rate limit, stopping');
+      console.log('Have reached follow/unfollow rate limit, stopping');
       return;
     }
 
@@ -264,7 +282,36 @@ module.exports = async (browser, options) => {
     }
   }
 
-  async function unfollowNonMutualFollowers() {
+  async function safelyUnfollowUserList(usersToUnfollow, limit) {
+    console.log(`Unfollowing ${usersToUnfollow.length} users`);
+
+    let i = 0;
+    for (const username of usersToUnfollow) {
+      if (hasReachedFollowedUserRateLimit()) {
+        console.log('Have reached follow/unfollow rate limit, stopping');
+        return;
+      }
+
+      if (i !== 0 && i % 10 === 0) {
+        console.log('Have unfollowed 10 users since last sleep. Sleeping');
+        await sleep(10 * 60 * 1000, 0.1);
+      }
+
+      await navigateToUser(username);
+      await unfollowCurrentUser(username);
+
+      i += 1;
+      console.log(`Have now unfollowed ${i} users of total ${usersToUnfollow.length}`);
+      await sleep(15000);
+
+      if (limit && i >= limit) {
+        console.log(`Have unfollowed limit of ${limit}, stopping`);
+        return;
+      }
+    }
+  }
+
+  async function unfollowNonMutualFollowers({ limit }) {
     console.log('Unfollowing non-mutual followers...');
     await page.goto(`${instagramBaseUrl}/${myUsername}`);
     const userData = await getCurrentUser();
@@ -292,30 +339,26 @@ module.exports = async (browser, options) => {
 
     console.log({ usersToUnfollow });
 
-    console.log(`Unfollowing ${usersToUnfollow.length} users`);
-
-    let i = 0;
-    for (const username of usersToUnfollow) {
-      if (i !== 0 && i % 10 === 0) {
-        console.log('Have unfollowed 10 users since last sleep. Sleeping');
-        await sleep(10 * 60 * 1000, 0.1);
-      }
-
-      await navigateToUser(username);
-      await unfollowCurrentUser(username);
-
-      i += 1;
-      console.log(`Have now unfollowed ${i} users of total ${usersToUnfollow.length}`);
-      await sleep(15000);
-    }
+    await safelyUnfollowUserList(usersToUnfollow, limit);
   }
 
+  async function unfollowOldFollowed({ ageInDays, limit }) {
+    console.log(`Unfollowing auto-followed users more than ${ageInDays} days ago...`);
+
+    const usersToUnfollow = followedUsers.filter(fu =>
+      !unfollowedUsers[fu.username] &&
+      (new Date().getTime() - fu.time) / (1000 * 60 * 60 * 24) > ageInDays).slice(0, limit);
+
+    console.log({ usersToUnfollow });
+
+    await safelyUnfollowUserList(usersToUnfollow, limit);
+  }
 
   page = await browser.newPage();
   await page.setUserAgent('Chrome');
 
   await tryLoadCookies();
-  await tryLoadFollowedDb();
+  await tryLoadDb();
 
   console.log({ followedUsers });
 
@@ -339,11 +382,13 @@ module.exports = async (browser, options) => {
 
   await trySaveCookies();
 
-  console.log(`Have followed ${getFollowedUsersThisTimeUnit().length} in the last ${maxFollowsTimeUnit / (60 * 60 * 1000)} hours`);
+  console.log(`Have followed ${getNumFollowedUsersThisTimeUnit(60 * 60 * 1000)} in the last hour`);
+  console.log(`Have followed ${getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000)} in the last 24 hours`);
 
   return {
     followUserFollowers,
     unfollowNonMutualFollowers,
+    unfollowOldFollowed,
     sleep,
   };
 };
