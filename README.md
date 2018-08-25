@@ -1,6 +1,6 @@
 # instauto
 
-instauto is an Instagram automation library written in modern, clean javascript using Google's Puppeteer. Goal is to be very easy to set up, use, and extend. Heavily inspired by [InstaPy](https://github.com/CharlesCCC/InstaPy).
+instauto is an Instagram automation/bot library written in modern, clean javascript using Google's Puppeteer. Goal is to be very easy to set up, use, and extend, and obey instagram's limits. Heavily inspired by [InstaPy](https://github.com/CharlesCCC/InstaPy), but I thought it was way too heavy and hard to setup.
 
 ## Setup
 
@@ -12,25 +12,25 @@ instauto is an Instagram automation library written in modern, clean javascript 
 
 - Open a terminal in the directory
 
-- Run cmd `npm install puppeteer instauto`
+- Run `npm install puppeteer instauto`
 
-## Usage
+- Run `node example`
 
-- In the directory with `example.js`, run `node example`
+You can run this code for example once every day using cron or pm2 or similar
 
-- You can run this code for example every day using cron or pm2 or similar
-
-## Tips
-- Run this on a machine with a non-cloud IP to avoid being banned
+See [index.js](https://github.com/mifi/instauto/blob/master/index.js) for available options.
 
 ## Supported functionality
 
-- Follow the followers of some particular users. Parameters like max/min ratio for followers/following can be set.
+- Follow the followers of some particular users. (e.g. celebrities.) Parameters like max/min ratio for followers/following can be set.
 
 - Unfollow users that don't follow us back. Will not unfollow any users that we recently followed.
 
 - Unfollow auto followed users (also those following us back) after a certain number of days.
 
-- The code automatically stops when reaching 100 follow/unfollows per hour or 700 per 24hr. Can be configured.
+- The code automatically prevents breaching 100 follow/unfollows per hour or 700 per 24hr, to prevent bans. This can be configured.
 
-See [index.js](https://github.com/mifi/instauto/blob/master/index.js) for available options.
+See [example.js](https://github.com/mifi/instauto/blob/master/example.js) for example of features
+
+## Tips
+- Run this on a machine with a non-cloud IP to avoid being banned
