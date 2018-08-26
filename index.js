@@ -19,6 +19,10 @@ module.exports = async (browser, options) => {
 
     followUserRatioMin = 0.2,
     followUserRatioMax = 4.0,
+    followUserMaxFollowers = null,
+    followUserMaxFollowing = null,
+    followUserMinFollowers = null,
+    followUserMinFollowing = null,
 
     dontUnfollowUntilTimeElapsed = 3 * 24 * 60 * 60 * 1000,
 
@@ -286,7 +290,17 @@ module.exports = async (browser, options) => {
 
         if (isPrivate && skipPrivate) {
           console.log('User is private, skipping');
-        } else if (ratio > followUserRatioMax || ratio < followUserRatioMin) {
+        } else if (
+          (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers) ||
+          (followUserMaxFollowing != null && followsCount > followUserMaxFollowing) ||
+          (followUserMinFollowers != null && followedByCount < followUserMinFollowers) ||
+          (followUserMinFollowing != null && followsCount < followUserMinFollowing)
+        ) {
+          console.log('User has too many or too few followers or following, skipping');
+        } else if (
+          (followUserRatioMax != null && ratio > followUserRatioMax) ||
+          (followUserRatioMin != null && ratio < followUserRatioMin)
+        ) {
           console.log('User has too many followers compared to follows or opposite, skipping');
         } else {
           await followCurrentUser(follower);
