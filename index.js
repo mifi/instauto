@@ -128,8 +128,8 @@ module.exports = async (browser, options) => {
     return okStatus;
   }
 
-  async function findFollowUnfollowButton({ follow = false }) {
-    const elementHandles = await page.$x(`//button[text()='${follow ? 'Follow' : 'Following'}']`);
+  async function findFollowUnfollowButton(text) {
+    const elementHandles = await page.$x(`//button[text()='${text}']`);
     if (elementHandles.length !== 1) {
       return undefined;
     }
@@ -143,7 +143,7 @@ module.exports = async (browser, options) => {
 
   // NOTE: assumes we are on this page
   async function followCurrentUser(username) {
-    const elementHandle = await findFollowUnfollowButton({ follow: true });
+    const elementHandle = await findFollowUnfollowButton('Follow');
     if (!elementHandle) throw new Error('Follow button not found');
 
     console.log(`Following user ${username}`);
@@ -152,7 +152,7 @@ module.exports = async (browser, options) => {
       await elementHandle.click();
       await sleep(5000);
 
-      const elementHandle2 = await findFollowUnfollowButton({ follow: false });
+      const elementHandle2 = await findFollowUnfollowButton('Following');
       if (!elementHandle2) console.log('Failed to follow user (button did not change state)');
 
       await addFollowedUser({ username, time: new Date().getTime() });
@@ -166,25 +166,29 @@ module.exports = async (browser, options) => {
   async function unfollowCurrentUser(username) {
     console.log(`Unfollowing user ${username}`);
 
-    const elementHandle = await findFollowUnfollowButton({ follow: false });
+    const elementHandle = await findFollowUnfollowButton('Following') || await findFollowUnfollowButton('Requested');
     if (!elementHandle) {
-      const elementHandle2 = await findFollowUnfollowButton({ follow: true });
+      const elementHandle2 = await findFollowUnfollowButton('Follow');
       if (elementHandle2) {
         console.log('User has been unfollowed already');
       } else {
-        throw new Error('Failed to find follow/unfollow button');
+        console.log('Failed to find follow/unfollow button');
       }
-    } else if (!dryRun) {
+    }
+
+    if (elementHandle && !dryRun) {
       await elementHandle.click();
       await sleep(1000);
       const confirmHandle = await findUnfollowConfirmButton();
-      if (confirmHandle) confirmHandle.click();
+      if (confirmHandle) await confirmHandle.click();
 
       await sleep(5000);
 
-      const elementHandle2 = await findFollowUnfollowButton({ follow: true });
+      const elementHandle2 = await findFollowUnfollowButton('Follow');
       if (!elementHandle2) console.log('Failed to unfollow user (button did not change state)');
+    }
 
+    if (!dryRun) {
       await addUnfollowedUser({ username, time: new Date().getTime() });
     }
 
