@@ -105,7 +105,8 @@ module.exports = async (browser, options) => {
     const now = new Date().getTime();
 
     return Object.values(followedUsers).filter(u => now - u.time < timeUnit).length
-      + Object.values(unfollowedUsers).filter(u => now - u.time < timeUnit).length;
+      + Object.values(unfollowedUsers).filter(u =>
+        !u.noActionTaken && now - u.time < timeUnit).length;
   }
 
   function hasReachedFollowedUserRateLimit() {
@@ -166,13 +167,17 @@ module.exports = async (browser, options) => {
   async function unfollowCurrentUser(username) {
     console.log(`Unfollowing user ${username}`);
 
+    let noActionTaken;
+
     const elementHandle = await findFollowUnfollowButton('Following') || await findFollowUnfollowButton('Requested');
     if (!elementHandle) {
       const elementHandle2 = await findFollowUnfollowButton('Follow');
       if (elementHandle2) {
         console.log('User has been unfollowed already');
+        noActionTaken = true;
       } else {
-        console.log('Failed to find follow/unfollow button');
+        console.log('Failed to find unfollow button');
+        noActionTaken = true;
       }
     }
 
@@ -189,7 +194,7 @@ module.exports = async (browser, options) => {
     }
 
     if (!dryRun) {
-      await addUnfollowedUser({ username, time: new Date().getTime() });
+      await addUnfollowedUser({ username, time: new Date().getTime(), noActionTaken });
     }
 
     await sleep(1000);
@@ -337,7 +342,7 @@ module.exports = async (browser, options) => {
         await unfollowCurrentUser(username);
       } else {
         // User not found
-        await addUnfollowedUser({ username, time: new Date().getTime() });
+        await addUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
       }
 
       i += 1;
