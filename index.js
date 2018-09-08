@@ -328,34 +328,40 @@ module.exports = async (browser, options) => {
   async function safelyUnfollowUserList(usersToUnfollow, limit) {
     console.log(`Unfollowing ${usersToUnfollow.length} users`);
 
-    let i = 0;
-    let j = 0;
+    let i = 0; // Number of people processed
+    let j = 0; // Number of people actually unfollowed (button pressed)
 
     for (const username of usersToUnfollow) {
-      if (hasReachedFollowedUserRateLimit()) {
-        console.log('Have reached follow/unfollow rate limit, stopping');
-        return;
-      }
+      const userFound = await navigateToUser(username);
 
-      if (j !== 0 && j % 10 === 0) {
-        console.log('Have unfollowed 10 users since last sleep. Sleeping');
-        await sleep(10 * 60 * 1000, 0.1);
-      }
-
-      if (!(await navigateToUser(username))) {
-        // User not found
+      if (!userFound) {
         await addUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
+        await sleep(3000);
       } else {
-        const res = await unfollowCurrentUser(username);
-        if (!res.noActionTaken) j += 1;
+        const { noActionTaken } = await unfollowCurrentUser(username);
+        if (noActionTaken) {
+          await sleep(3000);
+        } else {
+          await sleep(15000);
+          j += 1;
+
+          if (j % 10 === 0) {
+            console.log('Have unfollowed 10 users since last sleep. Sleeping');
+            await sleep(10 * 60 * 1000, 0.1);
+          }
+        }
       }
 
       i += 1;
       console.log(`Have now unfollowed ${i} users of total ${usersToUnfollow.length}`);
-      await sleep(15000);
 
       if (limit && j >= limit) {
         console.log(`Have unfollowed limit of ${limit}, stopping`);
+        return;
+      }
+
+      if (hasReachedFollowedUserRateLimit()) {
+        console.log('Have reached follow/unfollow rate limit, stopping');
         return;
       }
     }
