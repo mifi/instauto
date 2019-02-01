@@ -398,6 +398,28 @@ module.exports = async (browser, options) => {
     await safelyUnfollowUserList(usersToUnfollow, limit);
   }
 
+  async function unfollowOldAutoFollows({ limit } = {}) {
+    console.log('Unfollowing old auto-follows...');
+    await page.goto(`${instagramBaseUrl}/${myUsername}`);
+    const userData = await getCurrentUser();
+
+    const allFollowing = await getFollowersOrFollowing({
+      userId: userData.id,
+      getFollowers: false,
+    });
+    console.log({ allFollowing });
+
+    const usersToUnfollow = allFollowing.filter((u) => {
+      if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
+      if (haveRecentlyFollowedUser(u)) return false;
+      return true;
+    });
+
+    console.log({ usersToUnfollow });
+
+    await safelyUnfollowUserList(usersToUnfollow, limit);
+  }
+
   async function unfollowOldFollowed({ ageInDays, limit } = {}) {
     assert(ageInDays);
 
@@ -461,6 +483,7 @@ module.exports = async (browser, options) => {
   return {
     followUserFollowers,
     unfollowNonMutualFollowers,
+    unfollowOldAutoFollows,
     unfollowOldFollowed,
     sleep,
     listManuallyFollowedUsers,
