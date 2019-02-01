@@ -1,6 +1,6 @@
 {
   "name": "instauto",
-  "version": "4.5.0",
+  "version": "4.5.1",
   "description": "Instagram automation library written in Node.js",
   "main": "index.js",
   "scripts": {
