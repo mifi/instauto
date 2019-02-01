@@ -464,5 +464,6 @@ module.exports = async (browser, options) => {
     unfollowOldFollowed,
     sleep,
     listManuallyFollowedUsers,
+    getFollowersOrFollowing,
   };
 };
