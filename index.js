@@ -393,7 +393,7 @@ module.exports = async (browser, options) => {
       return true;
     });
 
-    console.log({ usersToUnfollow });
+    console.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
 
     await safelyUnfollowUserList(usersToUnfollow, limit);
   }
@@ -415,7 +415,7 @@ module.exports = async (browser, options) => {
       return true;
     });
 
-    console.log({ usersToUnfollow });
+    console.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
 
     await safelyUnfollowUserList(usersToUnfollow, limit);
   }
