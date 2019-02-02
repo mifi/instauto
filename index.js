@@ -410,7 +410,7 @@ module.exports = async (browser, options) => {
     console.log({ allFollowing });
 
     const usersToUnfollow = allFollowing.filter((u) => {
-      if (followedUsers.includes(u)) return false; // auto followed
+      if (followedUsers[u]) return false; // auto followed
       if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
       return true;
     });
