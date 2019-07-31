@@ -130,7 +130,7 @@ module.exports = async (browser, options) => {
   }
 
   async function findFollowUnfollowButton(text) {
-    const elementHandles = await page.$x(`//button[text()='${text}']`);
+    const elementHandles = await page.$x(`//header//button[text()='${text}']`);
     if (elementHandles.length !== 1) {
       return undefined;
     }
@@ -153,7 +153,7 @@ module.exports = async (browser, options) => {
       await elementHandle.click();
       await sleep(5000);
 
-      const elementHandle2 = await findFollowUnfollowButton('Following');
+      const elementHandle2 = await findFollowUnfollowButton('Following') || await findFollowUnfollowButton('Requested');
       if (!elementHandle2) console.log('Failed to follow user (button did not change state)');
 
       await addFollowedUser({ username, time: new Date().getTime() });
@@ -461,19 +461,25 @@ module.exports = async (browser, options) => {
   await sleep(1000);
 
   if (!(await isLoggedIn())) {
-    await page.click('a[href="/accounts/login/"]');
+    await page.click('a[href="/accounts/login/?source=auth_switcher"]');
     await sleep(1000);
     await page.type('input[name="username"]', myUsername, { delay: 50 });
     await sleep(1000);
     await page.type('input[name="password"]', password, { delay: 50 });
     await sleep(1000);
-    const loginButton = (await page.$x("//button[contains(text(), 'Log in')]"))[0];
+
+    const loginButton = (await page.$x("//button[.//text() = 'Log In']"))[0];
     await loginButton.click();
   }
 
   await sleep(3000);
 
-  assert(await isLoggedIn());
+  let warnedAboutLoginFail = false;
+  while (!(await isLoggedIn())) {
+    if (!warnedAboutLoginFail) console.log('WARNING: Login has not succeeded. This could be because of a "suspicious login attempt"-message. If that is the case, then you need to run puppeteer with headless false and complete the process.');
+    warnedAboutLoginFail = true;
+    await sleep(5000);
+  }
 
   await trySaveCookies();
 
