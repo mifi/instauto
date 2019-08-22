@@ -124,9 +124,18 @@ module.exports = async (browser, options) => {
     console.log(`Navigating to user ${username}`);
     const response = await page.goto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
     await sleep(1000);
-    const okStatus = response.status() === 200;
-    if (!okStatus) console.log(`Navigate to user returned status ${response.status()}`);
-    return okStatus;
+    const status = response.status();
+    if (status === 200) {
+      return true;
+    } else if (status === 404) {
+      console.log('User not found');
+      return false;
+    } else if (status === 429) {
+      console.error('Got 429 Too Many Requests, waiting...');
+      await sleep(60 * 60 * 1000);
+      throw new Error('Aborted operation due to too many requests'); // TODO retry instead
+    }
+    throw new Error(`Navigate to user returned status ${response.status()}`);
   }
 
   async function findFollowUnfollowButton(text) {
@@ -428,13 +437,21 @@ module.exports = async (browser, options) => {
   async function unfollowOldFollowed({ ageInDays, limit } = {}) {
     assert(ageInDays);
 
-    console.log(`Unfollowing auto-followed users more than ${ageInDays} days ago...`);
+    console.log(`Unfollowing currently followed users who were auto-followed more than ${ageInDays} days ago...`);
 
-    const usersToUnfollow = Object.values(followedUsers).filter(fu =>
-      !unfollowedUsers[fu.username] &&
-      (new Date().getTime() - fu.time) / (1000 * 60 * 60 * 24) > ageInDays)
-      .slice(0, limit)
-      .map(u => u.username);
+    await page.goto(`${instagramBaseUrl}/${myUsername}`);
+    const userData = await getCurrentUser();
+    const allFollowing = await getFollowersOrFollowing({
+      userId: userData.id,
+      getFollowers: false,
+    });
+    console.log({ allFollowing });
+
+    const usersToUnfollow = allFollowing.filter(u =>
+      followedUsers[u] && // auto followed
+      !excludeUsers.includes(u) &&
+      (new Date().getTime() - followedUsers[u].time) / (1000 * 60 * 60 * 24) > ageInDays)
+      .slice(0, limit);
 
     console.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
 
