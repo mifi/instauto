@@ -332,37 +332,42 @@ module.exports = async (browser, options) => {
     let j = 0; // Number of people actually unfollowed (button pressed)
 
     for (const username of usersToUnfollow) {
-      const userFound = await navigateToUser(username);
+      try {
+        const userFound = await navigateToUser(username);
 
-      if (!userFound) {
-        await addUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
-        await sleep(3000);
-      } else {
-        const { noActionTaken } = await unfollowCurrentUser(username);
-        if (noActionTaken) {
+        if (!userFound) {
+          await addUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
           await sleep(3000);
         } else {
-          await sleep(15000);
-          j += 1;
+          const { noActionTaken } = await unfollowCurrentUser(username);
 
-          if (j % 10 === 0) {
-            console.log('Have unfollowed 10 users since last sleep. Sleeping');
-            await sleep(10 * 60 * 1000, 0.1);
+          if (noActionTaken) {
+            await sleep(3000);
+          } else {
+            await sleep(15000);
+            j += 1;
+
+            if (j % 10 === 0) {
+              console.log('Have unfollowed 10 users since last sleep. Sleeping');
+              await sleep(10 * 60 * 1000, 0.1);
+            }
           }
         }
-      }
 
-      i += 1;
-      console.log(`Have now unfollowed ${i} users of total ${usersToUnfollow.length}`);
+        i += 1;
+        console.log(`Have now unfollowed ${i} users of total ${usersToUnfollow.length}`);
 
-      if (limit && j >= limit) {
-        console.log(`Have unfollowed limit of ${limit}, stopping`);
-        return;
-      }
+        if (limit && j >= limit) {
+          console.log(`Have unfollowed limit of ${limit}, stopping`);
+          return;
+        }
 
-      if (hasReachedFollowedUserRateLimit()) {
-        console.log('Have reached follow/unfollow rate limit, stopping');
-        return;
+        if (hasReachedFollowedUserRateLimit()) {
+          console.log('Have reached follow/unfollow rate limit, stopping');
+          return;
+        }
+      } catch (err) {
+        console.error('Failed to unfollow, continuing with next', err);
       }
     }
   }
