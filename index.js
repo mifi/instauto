@@ -3,6 +3,7 @@
 const assert = require('assert');
 const fs = require('fs-extra');
 const keyBy = require('lodash/keyBy');
+const UserAgent = require('user-agents');
 
 module.exports = async (browser, options) => {
   const {
@@ -472,7 +473,8 @@ module.exports = async (browser, options) => {
   }
 
   page = await browser.newPage();
-  await page.setUserAgent('Chrome');
+  const userAgent = new UserAgent();
+  await page.setUserAgent(userAgent.toString());
 
   await tryLoadCookies();
   await tryLoadDb();
