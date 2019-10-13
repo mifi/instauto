@@ -14,6 +14,27 @@ const options = {
   username: 'your-ig-username',
   password: 'your-ig-password',
 
+  // Global limit that prevents follow or unfollows (total) to exceed this number over a sliding window of one hour:
+  maxFollowsPerHour: 100,
+  // Global limit that prevents follow or unfollows (total) to exceed this number over a sliding window of one day:
+  maxFollowsPerDay: 700,
+  // (NOTE setting the above parameters too high will cause temp ban/throttle)
+
+  // Don't follow users that have a followers / following ratio less than this:
+  followUserRatioMin: 0.2,
+  // Don't follow users that have a followers / following ratio higher than this:
+  followUserRatioMax: 4.0,
+  // Don't follow users who have more followers than this:
+  followUserMaxFollowers: null,
+  // Don't follow users who have more people following them than this:
+  followUserMaxFollowing: null,
+  // Don't follow users who have less followers than this:
+  followUserMinFollowers: null,
+  // Don't follow users who have more people following them than this:
+  followUserMinFollowing: null,
+
+    dontUnfollowUntilTimeElapsed: 3 * 24 * 60 * 60 * 1000,
+
   // Usernames that we should not touch, e.g. your friends and actual followings
   excludeUsers: [],
 
