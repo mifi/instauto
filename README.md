@@ -56,10 +56,10 @@ See also:
 Also you might want to install the more lightweight package `puppeteer-core` instead of `puppeteer`.
 
 ## Running with pm2
-First install [pm2](https://github.com/Unitech/pm2). Then copy [instabot-js.yml](https://github.com/mifi/instauto/blob/master/instabot-js.yml) into the same dir as `example.js` and run:
+First install [pm2](https://github.com/Unitech/pm2). Then copy [instabot.yml](https://github.com/mifi/instauto/blob/master/instabot.yml) into the same dir as `example.js` and run:
 
 ```bash
-pm2 start instabot-js.yml
+pm2 start instabot.yml
 pm2 save
 pm2 startup
 ```
