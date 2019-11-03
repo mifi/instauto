@@ -1,0 +1,5 @@
+apps:
+  - script: example.js
+    name: instabot
+    restart_delay: 60000
+    log_date_format: 'YYYY-MM-DD HH:mm Z'
