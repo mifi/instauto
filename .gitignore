@@ -1,4 +1,5 @@
 node_modules
 cookies.json
 followed.json
+following.json
 run.js
