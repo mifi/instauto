@@ -1134,10 +1134,10 @@ universalify@^0.1.0:
   version "0.1.1"
   resolved "https://registry.yarnpkg.com/universalify/-/universalify-0.1.1.tgz#fa71badd4437af4c148841e3b3b165f9e9e590b7"
 
-user-agents@^1.0.359:
-  version "1.0.359"
-  resolved "https://registry.yarnpkg.com/user-agents/-/user-agents-1.0.359.tgz#9a95b82438da44c2141630e49e76edfa8cbe0958"
-  integrity sha512-MPyzhA9a9yHn8G5yMzSE39L3HTTwuD1JifpHYwrUzy8jYlLEhn13LoA5b+wQQWJlOXl0SDyHRuUyQ4xmJCbVIw==
+user-agents@^1.0.366:
+  version "1.0.366"
+  resolved "https://registry.yarnpkg.com/user-agents/-/user-agents-1.0.366.tgz#97a0afa47f950f6f75c1ce3f67ff04bd17bc9900"
+  integrity sha512-UyLZM4dX1JB/v1gcG+dZ3GYJoslO7Skkohsmr6Aa8sZAQqYrwg/ZeckGZwuXhgJAYZcLsENNE6XzeRN8VhpdAQ==
   dependencies:
     dot-json "^1.1.0"
     lodash.clonedeep "^4.5.0"
