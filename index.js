@@ -89,8 +89,11 @@ module.exports = async (browser, options) => {
     }
   }
 
-  const sleep = (ms, dev = 1) =>
-    new Promise(resolve => setTimeout(resolve, ((Math.random() * dev) + 1) * ms));
+  const sleep = (ms, dev = 1) => {
+    const msWithDev = ((Math.random() * dev) + 1) * ms;
+    console.log('Sleeping', msWithDev / 1000, 'sec');
+    return new Promise(resolve => setTimeout(resolve, msWithDev));
+  };
 
   async function addFollowedUser(user) {
     prevFollowedUsers[user.username] = user;
