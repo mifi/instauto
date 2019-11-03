@@ -240,13 +240,12 @@ module.exports = async (browser, options) => {
     let hasNextPage = true;
     let i = 0;
 
-    const shouldProceed = () => (
-      hasNextPage && (
-        maxPages == null
-        || i < maxPages
-        || (shouldProceedArg && shouldProceedArg(outUsers))
-      )
-    );
+    const shouldProceed = () => {
+      if (!hasNextPage) return false;
+      const isBelowMaxPages = maxPages == null || i < maxPages;
+      if (shouldProceedArg) return isBelowMaxPages && shouldProceedArg(outUsers);
+      return isBelowMaxPages;
+    };
 
     while (shouldProceed()) {
       const url = `${getFollowers ? followersUrl : followingUrl}&variables=${JSON.stringify(graphqlVariables)}`;
@@ -289,14 +288,14 @@ module.exports = async (browser, options) => {
     await navigateToUser(username);
 
     // Check if we have more than enough users that are not previously followed
-    const hasEnoughUsers = usersSoFar => (
-      usersSoFar.filter(f => !prevFollowedUsers[f]).length > maxFollowsPerUser + 5
+    const shouldProceed = usersSoFar => (
+      usersSoFar.filter(u => !prevFollowedUsers[u]).length < maxFollowsPerUser + 5
     );
     const userData = await getCurrentUser();
     let followers = await getFollowersOrFollowing({
       userId: userData.id,
       getFollowers: true,
-      shouldProceed: hasEnoughUsers,
+      shouldProceed,
     });
 
     console.log('Followers', followers);
