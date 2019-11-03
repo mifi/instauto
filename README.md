@@ -8,11 +8,11 @@ instauto is an Instagram automation/bot library written in modern, clean javascr
 
 - Create a new directory with a file like [example.js](https://github.com/mifi/instauto/blob/master/example.js)
 
-- Adjust your `example.js` to your needs. If you want to see how it would work without doing any actual actions, use the `dryRun: true` option.
+- Adjust your `example.js` to your needs. If you want to see how it would work without doing any invasive actions, use the `dryRun: true` option. Toggle `headless` to see it in action.
 
 - Open a terminal in the directory
 
-- Run `npm install puppeteer instauto`
+- Run `yarn add puppeteer instauto`
 
 - Run `node example`
 
@@ -34,3 +34,34 @@ See [example.js](https://github.com/mifi/instauto/blob/master/example.js) for ex
 
 ## Tips
 - Run this on a machine with a non-cloud IP to avoid being banned
+
+## Running on Raspberry Pi
+
+Because puppeteer chrome binaries are not provided for RPi, you need to first install chromium using apt.
+
+Then replace your puppeteer launch code:
+
+```js
+browser = await puppeteer.launch({
+    executablePath: '/usr/bin/chromium-browser',
+    headless: true,
+    args: ['--disable-features=VizDisplayCompositor'],
+});
+```
+
+See also:
+- https://github.com/GoogleChrome/puppeteer/issues/550
+- https://github.com/GoogleChrome/puppeteer/issues/3774
+
+Also you might want to install the more lightweight package `puppeteer-core` instead of `puppeteer`.
+
+## Running with pm2
+First install [pm2](https://github.com/Unitech/pm2). Then copy [instabot-js.yml](https://github.com/mifi/instauto/blob/master/instabot-js.yml) into the same dir as `example.js` and run:
+
+```bash
+pm2 start instabot-js.yml
+pm2 save
+pm2 startup
+```
+
+Now it will run automatically on reboot! 🙌
