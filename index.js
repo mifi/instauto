@@ -32,9 +32,6 @@ module.exports = async (browser, options) => {
     dryRun = true,
   } = options;
 
-  assert(myUsername);
-  assert(password);
-
   assert(cookiesPath);
   assert(followedDbPath);
   assert(unfollowedDbPath);
@@ -500,6 +497,9 @@ module.exports = async (browser, options) => {
   await sleep(3000);
 
   if (!(await isLoggedIn())) {
+    assert(myUsername);
+    assert(password);
+  
     await page.click('a[href="/accounts/login/?source=auth_switcher"]');
     await sleep(1000);
     await page.type('input[name="username"]', myUsername, { delay: 50 });
