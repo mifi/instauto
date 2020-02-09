@@ -12,6 +12,8 @@ instauto is an Instagram automation/bot library written in modern, clean javascr
 
 - Open a terminal in the directory
 
+- Run `npm i -g yarn`
+
 - Run `yarn add puppeteer instauto`
 
 - Run `node example`
@@ -56,7 +58,7 @@ See also:
 Also you might want to install the more lightweight package `puppeteer-core` instead of `puppeteer`.
 
 ## Running with pm2
-First install [pm2](https://github.com/Unitech/pm2). Then copy [instabot.yml](https://github.com/mifi/instauto/blob/master/instabot.yml) into the same dir as `example.js` and run:
+First install [pm2](https://github.com/Unitech/pm2). (`npm i -g pm2`) Then copy [instabot.yml](https://github.com/mifi/instauto/blob/master/instabot.yml) into the same dir as `example.js` and run:
 
 ```bash
 pm2 start instabot.yml
