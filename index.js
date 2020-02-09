@@ -497,7 +497,7 @@ module.exports = async (browser, options) => {
   // console.log({ prevFollowedUsers });
 
   await page.goto(`${instagramBaseUrl}/`);
-  await sleep(1000);
+  await sleep(3000);
 
   if (!(await isLoggedIn())) {
     await page.click('a[href="/accounts/login/?source=auth_switcher"]');
