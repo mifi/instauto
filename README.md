@@ -37,6 +37,10 @@ See [example.js](https://github.com/mifi/instauto/blob/master/example.js) for ex
 ## Tips
 - Run this on a machine with a non-cloud IP to avoid being banned
 
+## Troubleshooting
+
+- If it doesn't work, make sure your instagram language is set to english
+
 ## Running on Raspberry Pi
 
 Because puppeteer chrome binaries are not provided for RPi, you need to first install chromium using apt.
