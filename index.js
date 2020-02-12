@@ -139,12 +139,25 @@ module.exports = async (browser, options) => {
     throw new Error(`Navigate to user returned status ${response.status()}`);
   }
 
-  async function findFollowUnfollowButton(text) {
-    const elementHandles = await page.$x(`//header//button[text()='${text}']`);
+  async function findFollowButton() {
+    const elementHandles = await page.$x(`//header//button[text()='Follow']`);
     if (elementHandles.length !== 1) {
       return undefined;
     }
     return elementHandles[0];
+  }
+
+  async function findUnfollowButton() {
+    const elementHandles = await page.$x(`//header//button[text()='Following']`);
+    if (elementHandles.length > 0) return elementHandles[0];
+
+    const elementHandles2 = await page.$x(`//header//button[text()='Requested']`);
+    if (elementHandles2.length > 0) return elementHandles2[0];
+
+    const elementHandles3 = await page.$x("//header//button[*//span[@aria-label='Following']]");
+    if (elementHandles3.length > 0) return elementHandles3[0];
+
+    return undefined;
   }
 
   async function findUnfollowConfirmButton() {
@@ -154,7 +167,7 @@ module.exports = async (browser, options) => {
 
   // NOTE: assumes we are on this page
   async function followCurrentUser(username) {
-    const elementHandle = await findFollowUnfollowButton('Follow');
+    const elementHandle = await findFollowButton();
     if (!elementHandle) throw new Error('Follow button not found');
 
     console.log(`Following user ${username}`);
@@ -163,7 +176,7 @@ module.exports = async (browser, options) => {
       await elementHandle.click();
       await sleep(5000);
 
-      const elementHandle2 = await findFollowUnfollowButton('Following') || await findFollowUnfollowButton('Requested');
+      const elementHandle2 = await findUnfollowButton();
       if (!elementHandle2) console.log('Failed to follow user (button did not change state)');
 
       await addFollowedUser({ username, time: new Date().getTime() });
@@ -179,9 +192,9 @@ module.exports = async (browser, options) => {
 
     const res = { username, time: new Date().getTime() };
 
-    const elementHandle = await findFollowUnfollowButton('Following') || await findFollowUnfollowButton('Requested');
+    const elementHandle = await findUnfollowButton();
     if (!elementHandle) {
-      const elementHandle2 = await findFollowUnfollowButton('Follow');
+      const elementHandle2 = await findFollowButton();
       if (elementHandle2) {
         console.log('User has been unfollowed already');
         res.noActionTaken = true;
@@ -199,7 +212,7 @@ module.exports = async (browser, options) => {
 
       await sleep(5000);
 
-      const elementHandle2 = await findFollowUnfollowButton('Follow');
+      const elementHandle2 = await findFollowButton();
       if (!elementHandle2) console.log('Failed to unfollow user (button did not change state)');
     }
 
@@ -484,6 +497,10 @@ module.exports = async (browser, options) => {
       !prevFollowedUsers[u] && !excludeUsers.includes(u));
   }
 
+  function getPage() {
+    return page;
+  }
+
   page = await browser.newPage();
   const userAgent = new UserAgent();
   await page.setUserAgent(userAgent.toString());
@@ -534,5 +551,6 @@ module.exports = async (browser, options) => {
     listManuallyFollowedUsers,
     getFollowersOrFollowing,
     safelyUnfollowUserList,
+    getPage,
   };
 };
