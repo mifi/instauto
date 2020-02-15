@@ -139,6 +139,19 @@ module.exports = async (browser, options) => {
     throw new Error(`Navigate to user returned status ${response.status()}`);
   }
 
+  async function isActionBlocked() {
+    const elementHandles = await page.$x('//*[contains(text(), "Action Blocked")]');
+    return elementHandles.length > 0;
+  }
+
+  async function checkActionBlocked() {
+    if (await isActionBlocked()) {
+      console.error('Action Blocked, waiting 24h...');
+      await sleep(24 * 60 * 60 * 1000);
+      throw new Error('Aborted operation due to action blocked');
+    }
+  }
+
   async function findFollowButton() {
     const elementHandles = await page.$x(`//header//button[text()='Follow']`);
     if (elementHandles.length !== 1) {
@@ -176,6 +189,8 @@ module.exports = async (browser, options) => {
       await elementHandle.click();
       await sleep(5000);
 
+      await checkActionBlocked();
+
       const elementHandle2 = await findUnfollowButton();
       if (!elementHandle2) console.log('Failed to follow user (button did not change state)');
 
@@ -211,6 +226,8 @@ module.exports = async (browser, options) => {
       if (confirmHandle) await confirmHandle.click();
 
       await sleep(5000);
+
+      await checkActionBlocked();
 
       const elementHandle2 = await findFollowButton();
       if (!elementHandle2) console.log('Failed to unfollow user (button did not change state)');
@@ -547,6 +564,8 @@ module.exports = async (browser, options) => {
     unfollowNonMutualFollowers,
     unfollowAllUnknown,
     unfollowOldFollowed,
+    followCurrentUser,
+    unfollowCurrentUser,
     sleep,
     listManuallyFollowedUsers,
     getFollowersOrFollowing,
