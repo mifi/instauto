@@ -154,10 +154,10 @@ module.exports = async (browser, options) => {
 
   async function findFollowButton() {
     const elementHandles = await page.$x(`//header//button[text()='Follow']`);
-    if (elementHandles.length !== 1) {
-      return undefined;
-    }
-    return elementHandles[0];
+    if (elementHandles.length > 0) elementHandles[0];
+
+    const elementHandles2 = await page.$x(`//header//button[text()='Follow Back']`);
+    if (elementHandles2.length > 0) elementHandles[0];
   }
 
   async function findUnfollowButton() {
