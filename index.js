@@ -112,7 +112,7 @@ module.exports = async (browser, options) => {
 
   function hasReachedFollowedUserRateLimit() {
     return getNumFollowedUsersThisTimeUnit(60 * 60 * 1000) >= maxFollowsPerHour
-    || getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000) >= maxFollowsPerDay;
+      || getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000) >= maxFollowsPerDay;
   }
 
   function haveRecentlyFollowedUser(username) {
@@ -154,10 +154,10 @@ module.exports = async (browser, options) => {
 
   async function findFollowButton() {
     const elementHandles = await page.$x(`//header//button[text()='Follow']`);
-    if (elementHandles.length > 0) elementHandles[0];
+    if (elementHandles.length > 0) return elementHandles[0];
 
     const elementHandles2 = await page.$x(`//header//button[text()='Follow Back']`);
-    if (elementHandles2.length > 0) elementHandles[0];
+    if (elementHandles2.length > 0) return elementHandles[0];
   }
 
   async function findUnfollowButton() {
@@ -533,7 +533,7 @@ module.exports = async (browser, options) => {
   if (!(await isLoggedIn())) {
     assert(myUsername);
     assert(password);
-  
+
     await page.click('a[href="/accounts/login/?source=auth_switcher"]');
     await sleep(1000);
     await page.type('input[name="username"]', myUsername, { delay: 50 });
