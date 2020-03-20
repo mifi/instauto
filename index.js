@@ -535,8 +535,8 @@ module.exports = async (browser, options) => {
     assert(myUsername);
     assert(password);
 
-    await page.click('a[href="/accounts/login/?source=auth_switcher"]');
-    await sleep(1000);
+    // await page.click('a[href="/accounts/login/?source=auth_switcher"]');
+    // await sleep(1000);
     await page.type('input[name="username"]', myUsername, { delay: 50 });
     await sleep(1000);
     await page.type('input[name="password"]', password, { delay: 50 });
