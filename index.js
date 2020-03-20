@@ -14,6 +14,7 @@ module.exports = async (browser, options) => {
 
     username: myUsername,
     password,
+    enableCookies = true,
 
     maxFollowsPerHour = 100,
     maxFollowsPerDay = 700,
@@ -522,7 +523,7 @@ module.exports = async (browser, options) => {
   const userAgent = new UserAgent();
   await page.setUserAgent(userAgent.toString());
 
-  await tryLoadCookies();
+  if (enableCookies) await tryLoadCookies();
   await tryLoadDb();
 
   // console.log({ prevFollowedUsers });
