@@ -70,7 +70,7 @@ module.exports = async (browser, options) => {
     try {
       const cookies = JSON.parse(await fs.readFile(cookiesPath));
       for (const cookie of cookies) {
-        await page.setCookie(cookie);
+        if (cookie.name !== 'ig_lang') await page.setCookie(cookie);
       }
     } catch (err) {
       console.error('Failed to load cookies');
@@ -551,6 +551,15 @@ module.exports = async (browser, options) => {
 
   // console.log({ prevFollowedUsers });
 
+  // Not sure if we can set cookies before having gone to a page
+  await page.goto(`${instagramBaseUrl}/`);
+  await sleep(1000);
+  await page.setCookie({
+    name: 'ig_lang',
+    value: 'en',
+    path: '/',
+  });
+  await sleep(1000);
   await page.goto(`${instagramBaseUrl}/`);
   await sleep(3000);
 
