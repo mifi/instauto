@@ -79,11 +79,21 @@ module.exports = async (browser, options) => {
 
   async function trySaveCookies() {
     try {
+      console.log('Saving cookies');
       const cookies = await page.cookies();
 
       await fs.writeFile(cookiesPath, JSON.stringify(cookies, null, 2));
     } catch (err) {
       console.error('Failed to save cookies');
+    }
+  }
+
+  async function tryDeleteCookies() {
+    try {
+      console.log('Deleting cookies');
+      await fs.unlink(cookiesPath);
+    } catch (err) {
+      console.error('Failed to delete cookies');
     }
   }
 
@@ -149,6 +159,7 @@ module.exports = async (browser, options) => {
     if (await isActionBlocked()) {
       const hours = 3;
       console.error(`Action Blocked, waiting ${hours} hours...`);
+      await tryDeleteCookies();
       await sleep(hours * 60 * 60 * 1000);
       throw new Error('Aborted operation due to action blocked');
     }
