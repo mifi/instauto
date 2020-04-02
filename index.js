@@ -16,7 +16,7 @@ module.exports = async (browser, options) => {
     password,
     enableCookies = true,
 
-    maxFollowsPerHour = 30,
+    maxFollowsPerHour = 20,
     maxFollowsPerDay = 150,
 
     followUserRatioMin = 0.2,
