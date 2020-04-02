@@ -233,25 +233,21 @@ module.exports = async (browser, options) => {
     }
 
     if (!dryRun) {
-      try {
-        if (elementHandle) {
-          await elementHandle.click();
-          await sleep(1000);
-          const confirmHandle = await findUnfollowConfirmButton();
-          if (confirmHandle) await confirmHandle.click();
-    
-          await sleep(5000);
-    
-          await checkActionBlocked();
-    
-          const elementHandle2 = await findFollowButton();
-          if (!elementHandle2) throw new Error('Unfollow button did not change state');
-        }
-
-        await addUnfollowedUser(res);
-      } catch (err) {
-        console.log('Failed to unfollow user', err);
+      if (elementHandle) {
+        await elementHandle.click();
+        await sleep(1000);
+        const confirmHandle = await findUnfollowConfirmButton();
+        if (confirmHandle) await confirmHandle.click();
+  
+        await sleep(5000);
+  
+        await checkActionBlocked();
+  
+        const elementHandle2 = await findFollowButton();
+        if (!elementHandle2) throw new Error('Unfollow button did not change state');
       }
+
+      await addUnfollowedUser(res);
     }
 
     await sleep(1000);
