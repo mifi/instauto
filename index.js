@@ -121,9 +121,12 @@ module.exports = async (browser, options) => {
         !u.noActionTaken && now - u.time < timeUnit).length;
   }
 
-  function hasReachedFollowedUserRateLimit() {
-    return getNumFollowedUsersThisTimeUnit(60 * 60 * 1000) >= maxFollowsPerHour
-      || getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000) >= maxFollowsPerDay;
+  function hasReachedFollowedUserDayLimit() {
+    return getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000) >= maxFollowsPerDay;
+  }
+
+  function hasReachedFollowedUserHourLimit() {
+    return getNumFollowedUsersThisTimeUnit(60 * 60 * 1000) >= maxFollowsPerHour;
   }
 
   function haveRecentlyFollowedUser(username) {
@@ -319,9 +322,13 @@ module.exports = async (browser, options) => {
   async function followUserFollowers(username, {
     maxFollowsPerUser = 5, skipPrivate = false,
   } = {}) {
-    if (hasReachedFollowedUserRateLimit()) {
-      console.log('Have reached follow/unfollow rate limit, stopping');
+    if (hasReachedFollowedUserDayLimit()) {
+      console.log('Have reached daily follow/unfollow rate limit, stopping');
       return;
+    }
+    if (hasReachedFollowedUserHourLimit()) {
+      console.log('Have reached hourly follow/unfollow rate limit, sleeping 10 min');
+      await sleep(10 * 60 * 1000);
     }
 
     console.log(`Following the followers of ${username}`);
@@ -427,9 +434,13 @@ module.exports = async (browser, options) => {
           return;
         }
 
-        if (hasReachedFollowedUserRateLimit()) {
-          console.log('Have reached follow/unfollow rate limit, stopping');
+        if (hasReachedFollowedUserDayLimit()) {
+          console.log('Have reached daily follow/unfollow rate limit, stopping');
           return;
+        }
+        if (hasReachedFollowedUserHourLimit()) {
+          console.log('Have reached hourly follow/unfollow rate limit, sleeping 10 min');
+          await sleep(10 * 60 * 1000);
         }
       } catch (err) {
         console.error('Failed to unfollow, continuing with next', err);
