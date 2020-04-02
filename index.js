@@ -16,8 +16,8 @@ module.exports = async (browser, options) => {
     password,
     enableCookies = true,
 
-    maxFollowsPerHour = 100,
-    maxFollowsPerDay = 700,
+    maxFollowsPerHour = 30,
+    maxFollowsPerDay = 150,
 
     followUserRatioMin = 0.2,
     followUserRatioMax = 4.0,
@@ -147,8 +147,9 @@ module.exports = async (browser, options) => {
 
   async function checkActionBlocked() {
     if (await isActionBlocked()) {
-      console.error('Action Blocked, waiting 24h...');
-      await sleep(24 * 60 * 60 * 1000);
+      const hours = 3;
+      console.error(`Action Blocked, waiting ${hours} hours...`);
+      await sleep(hours * 60 * 60 * 1000);
       throw new Error('Aborted operation due to action blocked');
     }
   }
@@ -220,22 +221,26 @@ module.exports = async (browser, options) => {
       }
     }
 
-    if (elementHandle && !dryRun) {
-      await elementHandle.click();
-      await sleep(1000);
-      const confirmHandle = await findUnfollowConfirmButton();
-      if (confirmHandle) await confirmHandle.click();
-
-      await sleep(5000);
-
-      await checkActionBlocked();
-
-      const elementHandle2 = await findFollowButton();
-      if (!elementHandle2) console.log('Failed to unfollow user (button did not change state)');
-    }
-
     if (!dryRun) {
-      await addUnfollowedUser(res);
+      try {
+        if (elementHandle) {
+          await elementHandle.click();
+          await sleep(1000);
+          const confirmHandle = await findUnfollowConfirmButton();
+          if (confirmHandle) await confirmHandle.click();
+    
+          await sleep(5000);
+    
+          await checkActionBlocked();
+    
+          const elementHandle2 = await findFollowButton();
+          if (!elementHandle2) throw new Error('Unfollow button did not change state');
+        }
+
+        await addUnfollowedUser(res);
+      } catch (err) {
+        console.log('Failed to unfollow user', err);
+      }
     }
 
     await sleep(1000);
