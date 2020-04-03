@@ -322,6 +322,8 @@ module.exports = async (browser, options) => {
   async function followUserFollowers(username, {
     maxFollowsPerUser = 5, skipPrivate = false,
   } = {}) {
+    console.log(`Following the followers of ${username}`);
+
     if (hasReachedFollowedUserDayLimit()) {
       console.log('Have reached daily follow/unfollow rate limit, stopping');
       return;
@@ -330,8 +332,6 @@ module.exports = async (browser, options) => {
       console.log('Have reached hourly follow/unfollow rate limit, sleeping 10 min');
       await sleep(10 * 60 * 1000);
     }
-
-    console.log(`Following the followers of ${username}`);
 
     let numFollowedForThisUser = 0;
 
