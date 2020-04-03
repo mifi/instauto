@@ -31,6 +31,8 @@ module.exports = async (browser, options) => {
     excludeUsers = [],
 
     dryRun = true,
+
+    logger = console,
   } = options;
 
   assert(cookiesPath);
@@ -47,12 +49,12 @@ module.exports = async (browser, options) => {
     try {
       prevFollowedUsers = keyBy(JSON.parse(await fs.readFile(followedDbPath)), 'username');
     } catch (err) {
-      console.error('Failed to load followed db');
+      logger.error('Failed to load followed db');
     }
     try {
       prevUnfollowedUsers = keyBy(JSON.parse(await fs.readFile(unfollowedDbPath)), 'username');
     } catch (err) {
-      console.error('Failed to load unfollowed db');
+      logger.error('Failed to load unfollowed db');
     }
   }
 
@@ -61,7 +63,7 @@ module.exports = async (browser, options) => {
       await fs.writeFile(followedDbPath, JSON.stringify(Object.values(prevFollowedUsers)));
       await fs.writeFile(unfollowedDbPath, JSON.stringify(Object.values(prevUnfollowedUsers)));
     } catch (err) {
-      console.error('Failed to save db');
+      logger.error('Failed to save db');
     }
   }
 
@@ -73,33 +75,33 @@ module.exports = async (browser, options) => {
         if (cookie.name !== 'ig_lang') await page.setCookie(cookie);
       }
     } catch (err) {
-      console.error('Failed to load cookies');
+      logger.error('Failed to load cookies');
     }
   }
 
   async function trySaveCookies() {
     try {
-      console.log('Saving cookies');
+      logger.log('Saving cookies');
       const cookies = await page.cookies();
 
       await fs.writeFile(cookiesPath, JSON.stringify(cookies, null, 2));
     } catch (err) {
-      console.error('Failed to save cookies');
+      logger.error('Failed to save cookies');
     }
   }
 
   async function tryDeleteCookies() {
     try {
-      console.log('Deleting cookies');
+      logger.log('Deleting cookies');
       await fs.unlink(cookiesPath);
     } catch (err) {
-      console.error('Failed to delete cookies');
+      logger.error('Failed to delete cookies');
     }
   }
 
   const sleep = (ms, dev = 1) => {
     const msWithDev = ((Math.random() * dev) + 1) * ms;
-    console.log('Sleeping', msWithDev / 1000, 'sec');
+    logger.log('Sleeping', msWithDev / 1000, 'sec');
     return new Promise(resolve => setTimeout(resolve, msWithDev));
   };
 
@@ -136,17 +138,17 @@ module.exports = async (browser, options) => {
   }
 
   async function navigateToUser(username) {
-    console.log(`Navigating to user ${username}`);
+    logger.log(`Navigating to user ${username}`);
     const response = await page.goto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
     await sleep(1000);
     const status = response.status();
     if (status === 200) {
       return true;
     } else if (status === 404) {
-      console.log('User not found');
+      logger.log('User not found');
       return false;
     } else if (status === 429) {
-      console.error('Got 429 Too Many Requests, waiting...');
+      logger.error('Got 429 Too Many Requests, waiting...');
       await sleep(60 * 60 * 1000);
       throw new Error('Aborted operation due to too many requests'); // TODO retry instead
     }
@@ -161,7 +163,7 @@ module.exports = async (browser, options) => {
   async function checkActionBlocked() {
     if (await isActionBlocked()) {
       const hours = 3;
-      console.error(`Action Blocked, waiting ${hours} hours...`);
+      logger.error(`Action Blocked, waiting ${hours} hours...`);
       await tryDeleteCookies();
       await sleep(hours * 60 * 60 * 1000);
       throw new Error('Aborted operation due to action blocked');
@@ -199,7 +201,7 @@ module.exports = async (browser, options) => {
     const elementHandle = await findFollowButton();
     if (!elementHandle) throw new Error('Follow button not found');
 
-    console.log(`Following user ${username}`);
+    logger.log(`Following user ${username}`);
 
     if (!dryRun) {
       await elementHandle.click();
@@ -208,7 +210,7 @@ module.exports = async (browser, options) => {
       await checkActionBlocked();
 
       const elementHandle2 = await findUnfollowButton();
-      if (!elementHandle2) console.log('Failed to follow user (button did not change state)');
+      if (!elementHandle2) logger.log('Failed to follow user (button did not change state)');
 
       await addFollowedUser({ username, time: new Date().getTime() });
     }
@@ -219,7 +221,7 @@ module.exports = async (browser, options) => {
   // See https://github.com/timgrossmann/InstaPy/pull/2345
   // https://github.com/timgrossmann/InstaPy/issues/2355
   async function unfollowCurrentUser(username) {
-    console.log(`Unfollowing user ${username}`);
+    logger.log(`Unfollowing user ${username}`);
 
     const res = { username, time: new Date().getTime() };
 
@@ -227,10 +229,10 @@ module.exports = async (browser, options) => {
     if (!elementHandle) {
       const elementHandle2 = await findFollowButton();
       if (elementHandle2) {
-        console.log('User has been unfollowed already');
+        logger.log('User has been unfollowed already');
         res.noActionTaken = true;
       } else {
-        console.log('Failed to find unfollow button');
+        logger.log('Failed to find unfollow button');
         res.noActionTaken = true;
       }
     }
@@ -295,7 +297,7 @@ module.exports = async (browser, options) => {
 
     while (shouldProceed()) {
       const url = `${getFollowers ? followersUrl : followingUrl}&variables=${JSON.stringify(graphqlVariables)}`;
-      // console.log(url);
+      // logger.log(url);
       await page.goto(url);
       const json = await getPageJson();
 
@@ -311,7 +313,7 @@ module.exports = async (browser, options) => {
       i += 1;
 
       if (shouldProceed()) {
-        console.log(`Has more pages (current ${i})`);
+        logger.log(`Has more pages (current ${i})`);
         // await sleep(300);
       }
     }
@@ -322,14 +324,14 @@ module.exports = async (browser, options) => {
   async function followUserFollowers(username, {
     maxFollowsPerUser = 5, skipPrivate = false,
   } = {}) {
-    console.log(`Following the followers of ${username}`);
+    logger.log(`Following the followers of ${username}`);
 
     if (hasReachedFollowedUserDayLimit()) {
-      console.log('Have reached daily follow/unfollow rate limit, stopping');
+      logger.log('Have reached daily follow/unfollow rate limit, stopping');
       return;
     }
     if (hasReachedFollowedUserHourLimit()) {
-      console.log('Have reached hourly follow/unfollow rate limit, sleeping 10 min');
+      logger.log('Have reached hourly follow/unfollow rate limit, sleeping 10 min');
       await sleep(10 * 60 * 1000);
     }
 
@@ -348,7 +350,7 @@ module.exports = async (browser, options) => {
       shouldProceed,
     });
 
-    console.log('Followers', followers);
+    logger.log('Followers', followers);
 
     // Filter again
     followers = followers.filter(f => !prevFollowedUsers[f]);
@@ -356,7 +358,7 @@ module.exports = async (browser, options) => {
     for (const follower of followers) {
       try {
         if (numFollowedForThisUser >= maxFollowsPerUser) {
-          console.log('Have reached followed limit for this user, stopping');
+          logger.log('Have reached followed limit for this user, stopping');
           return;
         }
 
@@ -367,38 +369,38 @@ module.exports = async (browser, options) => {
         const followsCount = graphqlUser.edge_follow.count;
         const isPrivate = graphqlUser.is_private;
 
-        console.log({ followedByCount, followsCount });
+        logger.log({ followedByCount, followsCount });
 
         const ratio = followedByCount / (followsCount || 1);
 
         if (isPrivate && skipPrivate) {
-          console.log('User is private, skipping');
+          logger.log('User is private, skipping');
         } else if (
           (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers) ||
           (followUserMaxFollowing != null && followsCount > followUserMaxFollowing) ||
           (followUserMinFollowers != null && followedByCount < followUserMinFollowers) ||
           (followUserMinFollowing != null && followsCount < followUserMinFollowing)
         ) {
-          console.log('User has too many or too few followers or following, skipping');
+          logger.log('User has too many or too few followers or following, skipping');
         } else if (
           (followUserRatioMax != null && ratio > followUserRatioMax) ||
           (followUserRatioMin != null && ratio < followUserRatioMin)
         ) {
-          console.log('User has too many followers compared to follows or opposite, skipping');
+          logger.log('User has too many followers compared to follows or opposite, skipping');
         } else {
           await followCurrentUser(follower);
           numFollowedForThisUser += 1;
           await sleep(20000);
         }
       } catch (err) {
-        console.error(`Failed to process follower ${follower}`, err);
+        logger.error(`Failed to process follower ${follower}`, err);
         await sleep(20000);
       }
     }
   }
 
   async function safelyUnfollowUserList(usersToUnfollow, limit) {
-    console.log(`Unfollowing ${usersToUnfollow.length} users`);
+    logger.log(`Unfollowing ${usersToUnfollow.length} users`);
 
     let i = 0; // Number of people processed
     let j = 0; // Number of people actually unfollowed (button pressed)
@@ -420,36 +422,36 @@ module.exports = async (browser, options) => {
             j += 1;
 
             if (j % 10 === 0) {
-              console.log('Have unfollowed 10 users since last sleep. Sleeping');
+              logger.log('Have unfollowed 10 users since last sleep. Sleeping');
               await sleep(10 * 60 * 1000, 0.1);
             }
           }
         }
 
         i += 1;
-        console.log(`Have now unfollowed ${i} users of total ${usersToUnfollow.length}`);
+        logger.log(`Have now unfollowed ${i} users of total ${usersToUnfollow.length}`);
 
         if (limit && j >= limit) {
-          console.log(`Have unfollowed limit of ${limit}, stopping`);
+          logger.log(`Have unfollowed limit of ${limit}, stopping`);
           return;
         }
 
         if (hasReachedFollowedUserDayLimit()) {
-          console.log('Have reached daily follow/unfollow rate limit, stopping');
+          logger.log('Have reached daily follow/unfollow rate limit, stopping');
           return;
         }
         if (hasReachedFollowedUserHourLimit()) {
-          console.log('Have reached hourly follow/unfollow rate limit, sleeping 10 min');
+          logger.log('Have reached hourly follow/unfollow rate limit, sleeping 10 min');
           await sleep(10 * 60 * 1000);
         }
       } catch (err) {
-        console.error('Failed to unfollow, continuing with next', err);
+        logger.error('Failed to unfollow, continuing with next', err);
       }
     }
   }
 
   async function unfollowNonMutualFollowers({ limit } = {}) {
-    console.log('Unfollowing non-mutual followers...');
+    logger.log('Unfollowing non-mutual followers...');
     await page.goto(`${instagramBaseUrl}/${myUsername}`);
     const userData = await getCurrentUser();
 
@@ -457,30 +459,30 @@ module.exports = async (browser, options) => {
       userId: userData.id,
       getFollowers: true,
     });
-    console.log({ allFollowers });
+    logger.log({ allFollowers });
     const allFollowing = await getFollowersOrFollowing({
       userId: userData.id,
       getFollowers: false,
     });
-    console.log({ allFollowing });
+    logger.log({ allFollowing });
 
     const usersToUnfollow = allFollowing.filter((u) => {
       if (allFollowers.includes(u)) return false; // Follows us
       if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
       if (haveRecentlyFollowedUser(u)) {
-        console.log(`Have recently followed user ${u}, skipping`);
+        logger.log(`Have recently followed user ${u}, skipping`);
         return false;
       }
       return true;
     });
 
-    console.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
+    logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
 
     await safelyUnfollowUserList(usersToUnfollow, limit);
   }
 
   async function unfollowAllUnknown({ limit } = {}) {
-    console.log('Unfollowing all except excludes and auto followed');
+    logger.log('Unfollowing all except excludes and auto followed');
     await page.goto(`${instagramBaseUrl}/${myUsername}`);
     const userData = await getCurrentUser();
 
@@ -488,7 +490,7 @@ module.exports = async (browser, options) => {
       userId: userData.id,
       getFollowers: false,
     });
-    console.log({ allFollowing });
+    logger.log({ allFollowing });
 
     const usersToUnfollow = allFollowing.filter((u) => {
       if (prevFollowedUsers[u]) return false;
@@ -496,7 +498,7 @@ module.exports = async (browser, options) => {
       return true;
     });
 
-    console.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
+    logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
 
     await safelyUnfollowUserList(usersToUnfollow, limit);
   }
@@ -504,7 +506,7 @@ module.exports = async (browser, options) => {
   async function unfollowOldFollowed({ ageInDays, limit } = {}) {
     assert(ageInDays);
 
-    console.log(`Unfollowing currently followed users who were auto-followed more than ${ageInDays} days ago...`);
+    logger.log(`Unfollowing currently followed users who were auto-followed more than ${ageInDays} days ago...`);
 
     await page.goto(`${instagramBaseUrl}/${myUsername}`);
     const userData = await getCurrentUser();
@@ -512,7 +514,7 @@ module.exports = async (browser, options) => {
       userId: userData.id,
       getFollowers: false,
     });
-    console.log({ allFollowing });
+    logger.log({ allFollowing });
 
     const usersToUnfollow = allFollowing.filter(u =>
       prevFollowedUsers[u] &&
@@ -520,7 +522,7 @@ module.exports = async (browser, options) => {
       (new Date().getTime() - prevFollowedUsers[u].time) / (1000 * 60 * 60 * 24) > ageInDays)
       .slice(0, limit);
 
-    console.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
+    logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
 
     await safelyUnfollowUserList(usersToUnfollow, limit);
   }
@@ -549,7 +551,7 @@ module.exports = async (browser, options) => {
   if (enableCookies) await tryLoadCookies();
   await tryLoadDb();
 
-  // console.log({ prevFollowedUsers });
+  // logger.log({ prevFollowedUsers });
 
   // Not sure if we can set cookies before having gone to a page
   await page.goto(`${instagramBaseUrl}/`);
@@ -571,7 +573,7 @@ module.exports = async (browser, options) => {
       await page.click('a[href="/accounts/login/?source=auth_switcher"]');
       await sleep(1000);
     } catch (err) {
-      console.error('Failed to open login page, but continuing', err);
+      logger.error('Failed to open login page, but continuing', err);
     }
 
     await page.type('input[name="username"]', myUsername, { delay: 50 });
@@ -587,15 +589,15 @@ module.exports = async (browser, options) => {
 
   let warnedAboutLoginFail = false;
   while (!(await isLoggedIn())) {
-    if (!warnedAboutLoginFail) console.log('WARNING: Login has not succeeded. This could be because of a "suspicious login attempt"-message. If that is the case, then you need to run puppeteer with headless false and complete the process.');
+    if (!warnedAboutLoginFail) logger.log('WARNING: Login has not succeeded. This could be because of a "suspicious login attempt"-message. If that is the case, then you need to run puppeteer with headless false and complete the process.');
     warnedAboutLoginFail = true;
     await sleep(5000);
   }
 
   await trySaveCookies();
 
-  console.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(60 * 60 * 1000)} in the last hour`);
-  console.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000)} in the last 24 hours`);
+  logger.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(60 * 60 * 1000)} in the last hour`);
+  logger.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000)} in the last 24 hours`);
 
   return {
     followUserFollowers,
