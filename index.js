@@ -12,7 +12,7 @@ module.exports = async (browser, options) => {
     followedDbPath,
     unfollowedDbPath,
 
-    username: myUsername,
+    username: myUsernameIn,
     password,
     enableCookies = true,
 
@@ -34,6 +34,8 @@ module.exports = async (browser, options) => {
 
     logger = console,
   } = options;
+
+  let myUsername = myUsernameIn;
 
   assert(cookiesPath);
   assert(followedDbPath);
@@ -267,8 +269,12 @@ module.exports = async (browser, options) => {
   }
 
   async function getCurrentUser() {
-    return page.evaluate(() => // eslint-disable-line no-loop-func
-      window._sharedData.entry_data.ProfilePage[0].graphql.user); // eslint-disable-line no-undef,no-underscore-dangle,max-len
+    return page.evaluate(() => {
+      return window._sharedData.entry_data.ProfilePage[0].graphql.user; // eslint-disable-line no-undef,no-underscore-dangle,max-len
+      // return JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window.__additionalDataLoaded(\'feed\',')).innerHTML.replace(/^window.__additionalDataLoaded\('feed',({.*})\);$/, '$1'));
+      // return JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window._sharedData')).innerHTML.replace(/^window._sharedData ?= ?({.*});$/, '$1'));
+      // Array.from(document.getElementsByTagName('a')).find(el => el.attributes?.href?.value.includes(`${username}/followers`)).innerText
+    });
   }
 
   async function getFollowersOrFollowing({
@@ -369,7 +375,7 @@ module.exports = async (browser, options) => {
         const followsCount = graphqlUser.edge_follow.count;
         const isPrivate = graphqlUser.is_private;
 
-        logger.log({ followedByCount, followsCount });
+        logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
 
         const ratio = followedByCount / (followsCount || 1);
 
@@ -452,19 +458,18 @@ module.exports = async (browser, options) => {
 
   async function unfollowNonMutualFollowers({ limit } = {}) {
     logger.log('Unfollowing non-mutual followers...');
-    await page.goto(`${instagramBaseUrl}/${myUsername}`);
+    await navigateToUser(myUsername);
     const userData = await getCurrentUser();
 
     const allFollowers = await getFollowersOrFollowing({
       userId: userData.id,
       getFollowers: true,
     });
-    logger.log({ allFollowers });
     const allFollowing = await getFollowersOrFollowing({
       userId: userData.id,
       getFollowers: false,
     });
-    logger.log({ allFollowing });
+    // logger.log('allFollowers:', allFollowers, 'allFollowing:', allFollowing);
 
     const usersToUnfollow = allFollowing.filter((u) => {
       if (allFollowers.includes(u)) return false; // Follows us
@@ -483,14 +488,14 @@ module.exports = async (browser, options) => {
 
   async function unfollowAllUnknown({ limit } = {}) {
     logger.log('Unfollowing all except excludes and auto followed');
-    await page.goto(`${instagramBaseUrl}/${myUsername}`);
+    await navigateToUser(myUsername);
     const userData = await getCurrentUser();
 
     const allFollowing = await getFollowersOrFollowing({
       userId: userData.id,
       getFollowers: false,
     });
-    logger.log({ allFollowing });
+    // logger.log('allFollowing', allFollowing);
 
     const usersToUnfollow = allFollowing.filter((u) => {
       if (prevFollowedUsers[u]) return false;
@@ -508,13 +513,15 @@ module.exports = async (browser, options) => {
 
     logger.log(`Unfollowing currently followed users who were auto-followed more than ${ageInDays} days ago...`);
 
-    await page.goto(`${instagramBaseUrl}/${myUsername}`);
+    await navigateToUser(myUsername);
+    // await page.goto(`${instagramBaseUrl}/${myUsername}`);
     const userData = await getCurrentUser();
+
     const allFollowing = await getFollowersOrFollowing({
       userId: userData.id,
       getFollowers: false,
     });
-    logger.log({ allFollowing });
+    // logger.log('allFollowing', allFollowing);
 
     const usersToUnfollow = allFollowing.filter(u =>
       prevFollowedUsers[u] &&
@@ -525,10 +532,12 @@ module.exports = async (browser, options) => {
     logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
 
     await safelyUnfollowUserList(usersToUnfollow, limit);
+
+    return usersToUnfollow.length;
   }
 
   async function listManuallyFollowedUsers() {
-    await page.goto(`${instagramBaseUrl}/${myUsername}`);
+    await navigateToUser(myUsername);
     const userData = await getCurrentUser();
 
     const allFollowing = await getFollowersOrFollowing({
@@ -551,7 +560,7 @@ module.exports = async (browser, options) => {
   if (enableCookies) await tryLoadCookies();
   await tryLoadDb();
 
-  // logger.log({ prevFollowedUsers });
+  // logger.log('prevFollowedUsers', prevFollowedUsers);
 
   // Not sure if we can set cookies before having gone to a page
   await page.goto(`${instagramBaseUrl}/`);
@@ -598,6 +607,10 @@ module.exports = async (browser, options) => {
 
   logger.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(60 * 60 * 1000)} in the last hour`);
   logger.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000)} in the last 24 hours`);
+
+  if (!myUsername) {
+    myUsername = await page.evaluate(() => window._sharedData.config.viewer.username);
+  }
 
   return {
     followUserFollowers,
