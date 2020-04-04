@@ -591,7 +591,18 @@ module.exports = async (browser, options) => {
       await page.click('a[href="/accounts/login/?source=auth_switcher"]');
       await sleep(1000);
     } catch (err) {
-      logger.error('Attempt to open login page failed, but continuing');
+      logger.error('Login page button not found, assuming we have login form');
+    }
+
+    // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
+    try {
+      const elementHandles = await page.$x('//button[contains(text(), "Log In")]');
+      if (elementHandles.length === 1) {
+        elementHandles[0].click();
+        await sleep(1000);
+      }
+    } catch (err) {
+      logger.error('Failed to click login form button');
     }
 
     await page.type('input[name="username"]', myUsername, { delay: 50 });
@@ -605,12 +616,25 @@ module.exports = async (browser, options) => {
 
   await sleep(3000);
 
+  // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
+  async function checkSaveLoginInfo() {
+    const elementHandles = await page.$x('//button[contains(text(), "Save Info")]');
+    if (elementHandles.length === 1) {
+      elementHandles[0].click();
+      await sleep(5000);
+    }
+  }
+
+  await checkSaveLoginInfo();
+
   let warnedAboutLoginFail = false;
   while (!(await isLoggedIn())) {
     if (!warnedAboutLoginFail) logger.warn('WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process.');
     warnedAboutLoginFail = true;
     await sleep(5000);
   }
+
+  await checkSaveLoginInfo();
 
   await trySaveCookies();
 
