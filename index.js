@@ -558,7 +558,7 @@ module.exports = async (browser, options) => {
 
   page = await browser.newPage();
   if (randomizeUserAgent) {
-    const userAgentGenerated = new UserAgent();
+    const userAgentGenerated = new UserAgent({ deviceCategory: 'desktop' });
     await page.setUserAgent(userAgentGenerated.toString());
   }
   if (userAgent) await page.setUserAgent(userAgent);
