@@ -51,12 +51,12 @@ module.exports = async (browser, options) => {
     try {
       prevFollowedUsers = keyBy(JSON.parse(await fs.readFile(followedDbPath)), 'username');
     } catch (err) {
-      logger.error('Failed to load followed db');
+      logger.error('No followed database found');
     }
     try {
       prevUnfollowedUsers = keyBy(JSON.parse(await fs.readFile(unfollowedDbPath)), 'username');
     } catch (err) {
-      logger.error('Failed to load unfollowed db');
+      logger.error('No unfollowed database found');
     }
   }
 
@@ -65,7 +65,7 @@ module.exports = async (browser, options) => {
       await fs.writeFile(followedDbPath, JSON.stringify(Object.values(prevFollowedUsers)));
       await fs.writeFile(unfollowedDbPath, JSON.stringify(Object.values(prevUnfollowedUsers)));
     } catch (err) {
-      logger.error('Failed to save db');
+      logger.error('Failed to save database');
     }
   }
 
@@ -77,7 +77,7 @@ module.exports = async (browser, options) => {
         if (cookie.name !== 'ig_lang') await page.setCookie(cookie);
       }
     } catch (err) {
-      logger.error('Failed to load cookies');
+      logger.error('No cookies found');
     }
   }
 
@@ -97,7 +97,7 @@ module.exports = async (browser, options) => {
       logger.log('Deleting cookies');
       await fs.unlink(cookiesPath);
     } catch (err) {
-      logger.error('Failed to delete cookies');
+      logger.error('No cookies to delete');
     }
   }
 
@@ -565,6 +565,7 @@ module.exports = async (browser, options) => {
   // Not sure if we can set cookies before having gone to a page
   await page.goto(`${instagramBaseUrl}/`);
   await sleep(1000);
+  logger.log('Setting language to english');
   await page.setCookie({
     name: 'ig_lang',
     value: 'en',
@@ -575,14 +576,16 @@ module.exports = async (browser, options) => {
   await sleep(3000);
 
   if (!(await isLoggedIn())) {
-    assert(myUsername);
-    assert(password);
+    if (!myUsername || !password) {
+      await tryDeleteCookies();
+      throw new Error('No longer logged in. Deleting cookies and aborting. Need to provide username/password');
+    }
 
     try {
       await page.click('a[href="/accounts/login/?source=auth_switcher"]');
       await sleep(1000);
     } catch (err) {
-      logger.error('Failed to open login page, but continuing', err);
+      logger.error('Attempt to open login page failed, but continuing');
     }
 
     await page.type('input[name="username"]', myUsername, { delay: 50 });
@@ -598,7 +601,7 @@ module.exports = async (browser, options) => {
 
   let warnedAboutLoginFail = false;
   while (!(await isLoggedIn())) {
-    if (!warnedAboutLoginFail) logger.log('WARNING: Login has not succeeded. This could be because of a "suspicious login attempt"-message. If that is the case, then you need to run puppeteer with headless false and complete the process.');
+    if (!warnedAboutLoginFail) logger.warn('WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process.');
     warnedAboutLoginFail = true;
     await sleep(5000);
   }
@@ -608,8 +611,11 @@ module.exports = async (browser, options) => {
   logger.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(60 * 60 * 1000)} in the last hour`);
   logger.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000)} in the last 24 hours`);
 
-  if (!myUsername) {
-    myUsername = await page.evaluate(() => window._sharedData.config.viewer.username);
+  try {
+    const detectedUsername = await page.evaluate(() => window._sharedData.config.viewer.username);
+    if (detectedUsername) myUsername = detectedUsername;
+  } catch (err) {
+    logger.error('Failed to detect username', err);
   }
 
   return {
