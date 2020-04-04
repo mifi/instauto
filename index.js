@@ -16,6 +16,9 @@ module.exports = async (browser, options) => {
     password,
     enableCookies = true,
 
+    randomizeUserAgent = true,
+    userAgent,
+
     maxFollowsPerHour = 20,
     maxFollowsPerDay = 150,
 
@@ -554,8 +557,11 @@ module.exports = async (browser, options) => {
   }
 
   page = await browser.newPage();
-  const userAgent = new UserAgent();
-  await page.setUserAgent(userAgent.toString());
+  if (randomizeUserAgent) {
+    const userAgentGenerated = new UserAgent();
+    await page.setUserAgent(userAgentGenerated.toString());
+  }
+  if (userAgent) await page.setUserAgent(userAgent);
 
   if (enableCookies) await tryLoadCookies();
   await tryLoadDb();
