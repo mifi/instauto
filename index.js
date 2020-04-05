@@ -5,6 +5,15 @@ const fs = require('fs-extra');
 const keyBy = require('lodash/keyBy');
 const UserAgent = require('user-agents');
 
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]]; // eslint-disable-line no-param-reassign
+  }
+  return array;
+}
+
 module.exports = async (browser, options) => {
   const {
     instagramBaseUrl = 'https://www.instagram.com',
@@ -336,11 +345,11 @@ module.exports = async (browser, options) => {
     logger.log(`Following the followers of ${username}`);
 
     if (hasReachedFollowedUserDayLimit()) {
-      logger.log('Have reached daily follow/unfollow rate limit, stopping');
+      logger.log('Have reached daily follow rate limit, stopping');
       return;
     }
     if (hasReachedFollowedUserHourLimit()) {
-      logger.log('Have reached hourly follow/unfollow rate limit, sleeping 10 min');
+      logger.log('Have reached hourly follow rate limit, sleeping 10 min');
       await sleep(10 * 60 * 1000);
     }
 
@@ -408,6 +417,24 @@ module.exports = async (browser, options) => {
     }
   }
 
+  async function followUsersFollowers({ usersToFollowFollowersOf, maxFollowsPerUser, skipPrivate }) {
+    for (const username of shuffleArray(usersToFollowFollowersOf)) {
+      try {
+        await instauto.followUserFollowers(username, { maxFollowsPerUser, skipPrivate });
+
+        if (hasReachedFollowedUserDayLimit()) {
+          logger.log('Have reached daily unfollow rate limit, exiting loop');
+          return;
+        }
+
+        await instauto.sleep(10 * 60 * 1000);
+      } catch (err) {
+        console.error('Failed to follow user followers, continuing', err);
+        await instauto.sleep(60 * 1000);
+      }
+    }
+  }
+
   async function safelyUnfollowUserList(usersToUnfollow, limit) {
     logger.log(`Unfollowing ${usersToUnfollow.length} users`);
 
@@ -446,11 +473,11 @@ module.exports = async (browser, options) => {
         }
 
         if (hasReachedFollowedUserDayLimit()) {
-          logger.log('Have reached daily follow/unfollow rate limit, stopping');
+          logger.log('Have reached daily unfollow rate limit, stopping');
           return;
         }
         if (hasReachedFollowedUserHourLimit()) {
-          logger.log('Have reached hourly follow/unfollow rate limit, sleeping 10 min');
+          logger.log('Have reached hourly unfollow rate limit, sleeping 10 min');
           await sleep(10 * 60 * 1000);
         }
       } catch (err) {
@@ -660,5 +687,6 @@ module.exports = async (browser, options) => {
     getFollowersOrFollowing,
     safelyUnfollowUserList,
     getPage,
+    followUsersFollowers,
   };
 };
