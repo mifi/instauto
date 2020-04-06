@@ -420,17 +420,17 @@ module.exports = async (browser, options) => {
   async function followUsersFollowers({ usersToFollowFollowersOf, maxFollowsPerUser, skipPrivate }) {
     for (const username of shuffleArray(usersToFollowFollowersOf)) {
       try {
-        await instauto.followUserFollowers(username, { maxFollowsPerUser, skipPrivate });
+        await followUserFollowers(username, { maxFollowsPerUser, skipPrivate });
 
         if (hasReachedFollowedUserDayLimit()) {
           logger.log('Have reached daily unfollow rate limit, exiting loop');
           return;
         }
 
-        await instauto.sleep(10 * 60 * 1000);
+        await sleep(10 * 60 * 1000);
       } catch (err) {
         console.error('Failed to follow user followers, continuing', err);
-        await instauto.sleep(60 * 1000);
+        await sleep(60 * 1000);
       }
     }
   }
