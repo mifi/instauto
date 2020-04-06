@@ -423,7 +423,7 @@ module.exports = async (browser, options) => {
         await followUserFollowers(username, { maxFollowsPerUser, skipPrivate });
 
         if (hasReachedFollowedUserDayLimit()) {
-          logger.log('Have reached daily unfollow rate limit, exiting loop');
+          logger.log('Have reached daily follow rate limit, exiting loop');
           return;
         }
 
