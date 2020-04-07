@@ -5,8 +5,9 @@ const fs = require('fs-extra');
 const keyBy = require('lodash/keyBy');
 const UserAgent = require('user-agents');
 
-
-function shuffleArray(array) {
+// NOTE duplicated in page
+function shuffleArray(arrayIn) {
+  const array = [...arrayIn];
   for (let i = array.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [array[i], array[j]] = [array[j], array[i]]; // eslint-disable-line no-param-reassign
@@ -14,12 +15,16 @@ function shuffleArray(array) {
   return array;
 }
 
+const dayMs = 24 * 60 * 60 * 1000;
+const hourMs = 60 * 60 * 1000;
+
 module.exports = async (browser, options) => {
   const {
     instagramBaseUrl = 'https://www.instagram.com',
     cookiesPath,
     followedDbPath,
     unfollowedDbPath,
+    likesDbPath,
 
     username: myUsernameIn,
     password,
@@ -30,6 +35,8 @@ module.exports = async (browser, options) => {
 
     maxFollowsPerHour = 20,
     maxFollowsPerDay = 150,
+
+    maxLikesPerDay = 50,
 
     followUserRatioMin = 0.2,
     followUserRatioMax = 4.0,
@@ -52,11 +59,13 @@ module.exports = async (browser, options) => {
   assert(cookiesPath);
   assert(followedDbPath);
   assert(unfollowedDbPath);
+  assert(likesDbPath);
 
   // State
   let page;
   let prevFollowedUsers = {};
   let prevUnfollowedUsers = {};
+  let prevLikes = [];
 
 
   async function tryLoadDb() {
@@ -70,12 +79,18 @@ module.exports = async (browser, options) => {
     } catch (err) {
       logger.error('No unfollowed database found');
     }
+    try {
+      prevLikes = JSON.parse(await fs.readFile(likesDbPath));
+    } catch (err) {
+      logger.error('No likes database found');
+    }
   }
 
   async function trySaveDb() {
     try {
       await fs.writeFile(followedDbPath, JSON.stringify(Object.values(prevFollowedUsers)));
       await fs.writeFile(unfollowedDbPath, JSON.stringify(Object.values(prevUnfollowedUsers)));
+      await fs.writeFile(likesDbPath, JSON.stringify(prevLikes));
     } catch (err) {
       logger.error('Failed to save database');
     }
@@ -129,6 +144,11 @@ module.exports = async (browser, options) => {
     await trySaveDb();
   }
 
+  async function onImageLiked() {
+    prevLikes.push({ time: new Date().getTime() });
+    await trySaveDb();
+  }
+
   function getNumFollowedUsersThisTimeUnit(timeUnit) {
     const now = new Date().getTime();
 
@@ -138,11 +158,20 @@ module.exports = async (browser, options) => {
   }
 
   function hasReachedFollowedUserDayLimit() {
-    return getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000) >= maxFollowsPerDay;
+    return getNumFollowedUsersThisTimeUnit(dayMs) >= maxFollowsPerDay;
   }
 
   function hasReachedFollowedUserHourLimit() {
-    return getNumFollowedUsersThisTimeUnit(60 * 60 * 1000) >= maxFollowsPerHour;
+    return getNumFollowedUsersThisTimeUnit(hourMs) >= maxFollowsPerHour;
+  }
+
+  function getNumLikesThisTimeUnit(timeUnit) {
+    const now = new Date().getTime();
+    return prevLikes.filter(u => now - u.time < timeUnit).length
+  }
+
+  function hasReachedDailyLikesLimit() {
+    return getNumLikesThisTimeUnit(dayMs) >= maxLikesPerDay;
   }
 
   function haveRecentlyFollowedUser(username) {
@@ -339,8 +368,100 @@ module.exports = async (browser, options) => {
     return outUsers;
   }
 
+  async function likeCurrentUserImagesPageCode({ likeImagesMin, likeImagesMax }) {
+    const allImages = Array.from(document.getElementsByTagName('a')).filter(el => /instagram.com\/p\//.test(el.href));
+
+    function shuffleArray(arrayIn) {
+      const array = [...arrayIn];
+      for (let i = array.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]]; // eslint-disable-line no-param-reassign
+      }
+      return array;
+    }
+
+    const imagesShuffled = shuffleArray(allImages);
+
+    const numImagesToLike = Math.floor(Math.random() * (likeImagesMax + 1 - likeImagesMin) + likeImagesMin);
+    
+    instautoLog(`Liking ${numImagesToLike} image(s)`);
+
+    const images = imagesShuffled.slice(0, numImagesToLike);
+    
+    if (images.length < 1) {
+      instautoLog('No images to like');
+      return;
+    }
+
+    for (const image of images) {
+      image.click();
+    
+      await window.instautoSleep(3000);
+    
+      const dialog = document.querySelector('*[role=dialog]');
+    
+      if (!dialog) throw new Error('Dialog not found');
+    
+      const section = Array.from(dialog.querySelectorAll('section')).find(s => s.querySelectorAll('*[aria-label="Like"]')[0] && s.querySelectorAll('*[aria-label="Comment"]')[0]);
+    
+      if (!section) throw new Error('Like button section not found');
+    
+      const likeButtonChild = section.querySelectorAll('*[aria-label="Like"]')[0];
+    
+      if (!likeButtonChild) throw new Error('Like button not found (aria-label)');
+    
+      function findClickableParent(el) {
+        let elAt = el;
+        while (elAt) {
+          if (elAt.click) {
+            return elAt;
+          }
+          elAt = elAt.parentElement;
+        }
+      }
+    
+      const foundClickable = findClickableParent(likeButtonChild);
+    
+      if (!foundClickable) throw new Error('Like button not found');
+    
+      foundClickable.click();
+
+      window.instautoOnImageLiked();
+    
+      await window.instautoSleep(3000);
+    
+      const closeButtonChild = document.querySelector('button [aria-label=Close]');
+    
+      if (!closeButtonChild) throw new Error('Close button not found (aria-label)');
+    
+      const closeButton = findClickableParent(closeButtonChild);
+    
+      if (!closeButton) throw new Error('Close button not found');
+    
+      closeButton.click();
+    
+      await window.instautoSleep(5000);
+    }
+
+    instautoLog('Done liking images');
+  }
+
+  async function likeCurrentUserImages({ likeImagesMin, likeImagesMax } = {}) {
+    if (!likeImagesMin || !likeImagesMax || likeImagesMax <= likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
+
+    try {
+      await page.exposeFunction('instautoSleep', sleep);
+      await page.exposeFunction('instautoLog', (...args) => console.log(...args));
+      await page.exposeFunction('instautoOnImageLiked', onImageLiked);
+    } catch (err) {
+      // Ignore already exists error
+    }
+
+    await page.evaluate(likeCurrentUserImagesPageCode, { likeImagesMin, likeImagesMax });
+  }
+
   async function followUserFollowers(username, {
-    maxFollowsPerUser = 5, skipPrivate = false,
+    maxFollowsPerUser = 5, skipPrivate = false, enableLikeImages, likeImagesMin, likeImagesMax,
   } = {}) {
     logger.log(`Following the followers of ${username}`);
 
@@ -408,6 +529,17 @@ module.exports = async (browser, options) => {
         } else {
           await followCurrentUser(follower);
           numFollowedForThisUser += 1;
+
+          await sleep(10000);
+
+          if (!isPrivate && enableLikeImages && !hasReachedDailyLikesLimit()) {
+            try {
+              await likeCurrentUserImages({ likeImagesMin, likeImagesMax });
+            } catch (err) {
+              logger.error(`Failed to follow user's images ${follower}`, err);
+            }
+          }
+  
           await sleep(20000);
         }
       } catch (err) {
@@ -417,10 +549,10 @@ module.exports = async (browser, options) => {
     }
   }
 
-  async function followUsersFollowers({ usersToFollowFollowersOf, maxFollowsPerUser, skipPrivate }) {
+  async function followUsersFollowers({ usersToFollowFollowersOf, maxFollowsPerUser, skipPrivate, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
     for (const username of shuffleArray(usersToFollowFollowersOf)) {
       try {
-        await followUserFollowers(username, { maxFollowsPerUser, skipPrivate });
+        await followUserFollowers(username, { maxFollowsPerUser, skipPrivate, enableLikeImages, likeImagesMin, likeImagesMax });
 
         if (hasReachedFollowedUserDayLimit()) {
           logger.log('Have reached daily follow rate limit, exiting loop');
@@ -665,8 +797,9 @@ module.exports = async (browser, options) => {
 
   await trySaveCookies();
 
-  logger.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(60 * 60 * 1000)} in the last hour`);
-  logger.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(24 * 60 * 60 * 1000)} in the last 24 hours`);
+  logger.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(hourMs)} in the last hour`);
+  logger.log(`Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(dayMs)} in the last 24 hours`);
+  logger.log(`Have liked ${getNumLikesThisTimeUnit(dayMs)} images in the last 24 hours`);
 
   try {
     const detectedUsername = await page.evaluate(() => window._sharedData.config.viewer.username);
@@ -688,5 +821,6 @@ module.exports = async (browser, options) => {
     safelyUnfollowUserList,
     getPage,
     followUsersFollowers,
+    likeCurrentUserImages,
   };
 };

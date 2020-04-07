@@ -10,6 +10,8 @@ const options = {
   followedDbPath: './followed.json',
   // Will store all unfollowed users here
   unfollowedDbPath: './unfollowed.json',
+  // Will store all likes here
+  likesDbPath: './likes.json',
 
   username: 'your-ig-username',
   password: 'your-ig-password',
