@@ -63,6 +63,8 @@ module.exports = async (browser, options) => {
 
   // State
   let page;
+
+  // DB state
   let prevFollowedUsers = {};
   let prevUnfollowedUsers = {};
   let prevLikes = [];
@@ -72,17 +74,17 @@ module.exports = async (browser, options) => {
     try {
       prevFollowedUsers = keyBy(JSON.parse(await fs.readFile(followedDbPath)), 'username');
     } catch (err) {
-      logger.error('No followed database found');
+      logger.warn('No followed database found');
     }
     try {
       prevUnfollowedUsers = keyBy(JSON.parse(await fs.readFile(unfollowedDbPath)), 'username');
     } catch (err) {
-      logger.error('No unfollowed database found');
+      logger.warn('No unfollowed database found');
     }
     try {
       prevLikes = JSON.parse(await fs.readFile(likesDbPath));
     } catch (err) {
-      logger.error('No likes database found');
+      logger.warn('No likes database found');
     }
   }
 
@@ -550,15 +552,17 @@ module.exports = async (browser, options) => {
   }
 
   async function followUsersFollowers({ usersToFollowFollowersOf, maxFollowsTotal = 150, skipPrivate, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
-    if (maxFollowsTotal && maxFollowsTotal > 2) {
-      maxFollowsPerUser = Math.floor(maxFollowsTotal / usersToFollowFollowersOf.length) + 1;
-    } else {
+    if (!maxFollowsTotal || maxFollowsTotal <= 2) {
       throw new Error(`Invalid parameter maxFollowsTotal ${maxFollowsTotal}`);
     }
 
-    if (maxFollowsPerUser < 1) throw new Error(`Parameter maxFollowsTotal ${maxFollowsTotal} leads to no follows per user`);
+    // If max is set to lower than the user list, slice off
+    const usersToFollowFollowersOfSliced = shuffleArray(usersToFollowFollowersOf).slice(0, maxFollowsTotal);
 
-    for (const username of shuffleArray(usersToFollowFollowersOf)) {
+    // Round up or we risk following none
+    const maxFollowsPerUser = Math.floor(maxFollowsTotal / usersToFollowFollowersOfSliced.length) + 1;
+
+    for (const username of usersToFollowFollowersOfSliced) {
       try {
         await followUserFollowers(username, { maxFollowsPerUser, skipPrivate, enableLikeImages, likeImagesMin, likeImagesMax });
 
@@ -731,6 +735,7 @@ module.exports = async (browser, options) => {
   if (userAgent) await page.setUserAgent(userAgent);
 
   if (enableCookies) await tryLoadCookies();
+
   await tryLoadDb();
 
   // logger.log('prevFollowedUsers', prevFollowedUsers);
