@@ -447,7 +447,7 @@ module.exports = async (browser, options) => {
   }
 
   async function likeCurrentUserImages({ likeImagesMin, likeImagesMax } = {}) {
-    if (!likeImagesMin || !likeImagesMax || likeImagesMax <= likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
+    if (!likeImagesMin || !likeImagesMax || likeImagesMax < likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
 
     try {
       await page.exposeFunction('instautoSleep', sleep);
@@ -463,7 +463,7 @@ module.exports = async (browser, options) => {
   async function followUserFollowers(username, {
     maxFollowsPerUser = 5, skipPrivate = false, enableLikeImages, likeImagesMin, likeImagesMax,
   } = {}) {
-    logger.log(`Following the followers of ${username}`);
+    logger.log(`Following up to ${maxFollowsPerUser} followers of ${username}`);
 
     if (hasReachedFollowedUserDayLimit()) {
       logger.log('Have reached daily follow rate limit, stopping');
@@ -480,7 +480,7 @@ module.exports = async (browser, options) => {
 
     // Check if we have more than enough users that are not previously followed
     const shouldProceed = usersSoFar => (
-      usersSoFar.filter(u => !prevFollowedUsers[u]).length < maxFollowsPerUser + 5
+      usersSoFar.filter(u => !prevFollowedUsers[u]).length < maxFollowsPerUser + 5 // 5 is just a margin
     );
     const userData = await getCurrentUser();
     let followers = await getFollowersOrFollowing({
@@ -549,7 +549,15 @@ module.exports = async (browser, options) => {
     }
   }
 
-  async function followUsersFollowers({ usersToFollowFollowersOf, maxFollowsPerUser, skipPrivate, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
+  async function followUsersFollowers({ usersToFollowFollowersOf, maxFollowsTotal = 150, skipPrivate, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
+    if (maxFollowsTotal && maxFollowsTotal > 2) {
+      maxFollowsPerUser = Math.floor(maxFollowsTotal / usersToFollowFollowersOf.length) + 1;
+    } else {
+      throw new Error(`Invalid parameter maxFollowsTotal ${maxFollowsTotal}`);
+    }
+
+    if (maxFollowsPerUser < 1) throw new Error(`Parameter maxFollowsTotal ${maxFollowsTotal} leads to no follows per user`);
+
     for (const username of shuffleArray(usersToFollowFollowersOf)) {
       try {
         await followUserFollowers(username, { maxFollowsPerUser, skipPrivate, enableLikeImages, likeImagesMin, likeImagesMax });
