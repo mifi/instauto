@@ -2,10 +2,10 @@
 
 const assert = require('assert');
 const fs = require('fs-extra');
-const keyBy = require('lodash/keyBy');
 const UserAgent = require('user-agents');
+const JSONDB = require('./db');
 
-// NOTE duplicated in page
+// NOTE duplicated inside puppeteer page
 function shuffleArray(arrayIn) {
   const array = [...arrayIn];
   for (let i = array.length - 1; i > 0; i -= 1) {
@@ -15,16 +15,15 @@ function shuffleArray(arrayIn) {
   return array;
 }
 
+const botWorkShiftHours = 16;
+
 const dayMs = 24 * 60 * 60 * 1000;
 const hourMs = 60 * 60 * 1000;
 
-module.exports = async (browser, options) => {
+const Instauto = async (db, browser, options) => {
   const {
     instagramBaseUrl = 'https://www.instagram.com',
     cookiesPath,
-    followedDbPath,
-    unfollowedDbPath,
-    likesDbPath,
 
     username: myUsernameIn,
     password,
@@ -57,47 +56,19 @@ module.exports = async (browser, options) => {
   let myUsername = myUsernameIn;
 
   assert(cookiesPath);
-  assert(followedDbPath);
-  assert(unfollowedDbPath);
-  assert(likesDbPath);
+  assert(db);
+
+  assert(maxFollowsPerHour * botWorkShiftHours >= maxFollowsPerDay, 'Max follows per hour too low compared to max follows per day');
+
+  const {
+    addPrevFollowedUser, getPrevFollowedUser, addPrevUnfollowedUser, getLikedPhotosLastTimeUnit,
+    getPrevUnfollowedUsers, getPrevFollowedUsers, addLikedPhoto,
+  } = db;
+
+  const getNumLikesThisTimeUnit = (time) => getLikedPhotosLastTimeUnit(time).length;
 
   // State
   let page;
-
-  // DB state
-  let prevFollowedUsers = {};
-  let prevUnfollowedUsers = {};
-  let prevLikes = [];
-
-
-  async function tryLoadDb() {
-    try {
-      prevFollowedUsers = keyBy(JSON.parse(await fs.readFile(followedDbPath)), 'username');
-    } catch (err) {
-      logger.warn('No followed database found');
-    }
-    try {
-      prevUnfollowedUsers = keyBy(JSON.parse(await fs.readFile(unfollowedDbPath)), 'username');
-    } catch (err) {
-      logger.warn('No unfollowed database found');
-    }
-    try {
-      prevLikes = JSON.parse(await fs.readFile(likesDbPath));
-    } catch (err) {
-      logger.warn('No likes database found');
-    }
-  }
-
-  async function trySaveDb() {
-    try {
-      await fs.writeFile(followedDbPath, JSON.stringify(Object.values(prevFollowedUsers)));
-      await fs.writeFile(unfollowedDbPath, JSON.stringify(Object.values(prevUnfollowedUsers)));
-      await fs.writeFile(likesDbPath, JSON.stringify(prevLikes));
-    } catch (err) {
-      logger.error('Failed to save database');
-    }
-  }
-
 
   async function tryLoadCookies() {
     try {
@@ -132,44 +103,40 @@ module.exports = async (browser, options) => {
 
   const sleep = (ms, dev = 1) => {
     const msWithDev = ((Math.random() * dev) + 1) * ms;
-    logger.log('Sleeping', msWithDev / 1000, 'sec');
+    logger.log('Waiting', Math.round(msWithDev / 1000), 'sec');
     return new Promise(resolve => setTimeout(resolve, msWithDev));
   };
 
-  async function addFollowedUser(user) {
-    prevFollowedUsers[user.username] = user;
-    await trySaveDb();
-  }
-
-  async function addUnfollowedUser(user) {
-    prevUnfollowedUsers[user.username] = user;
-    await trySaveDb();
-  }
-
-  async function onImageLiked() {
-    prevLikes.push({ time: new Date().getTime() });
-    await trySaveDb();
+  async function onImageLiked({ username, href }) {
+    await addLikedPhoto({ username, href, time: new Date().getTime() });
   }
 
   function getNumFollowedUsersThisTimeUnit(timeUnit) {
     const now = new Date().getTime();
 
-    return Object.values(prevFollowedUsers).filter(u => now - u.time < timeUnit).length
-      + Object.values(prevUnfollowedUsers).filter(u =>
-        !u.noActionTaken && now - u.time < timeUnit).length;
+    return getPrevFollowedUsers().filter(u => now - u.time < timeUnit).length
+      + getPrevUnfollowedUsers().filter(u => !u.noActionTaken && now - u.time < timeUnit).length;
   }
 
-  function hasReachedFollowedUserDayLimit() {
-    return getNumFollowedUsersThisTimeUnit(dayMs) >= maxFollowsPerDay;
+  async function checkReachedFollowedUserDayLimit() {
+    const reachedFollowedUserDayLimit = getNumFollowedUsersThisTimeUnit(dayMs) >= maxFollowsPerDay;
+    if (reachedFollowedUserDayLimit) {
+      logger.log('Have reached daily follow/unfollow limit, waiting 10 min');
+      await sleep(10 * 60 * 1000);
+    }
   }
 
-  function hasReachedFollowedUserHourLimit() {
-    return getNumFollowedUsersThisTimeUnit(hourMs) >= maxFollowsPerHour;
+  async function checkReachedFollowedUserHourLimit() {
+    const hasReachedFollowedUserHourLimit = getNumFollowedUsersThisTimeUnit(hourMs) >= maxFollowsPerHour;
+    if (hasReachedFollowedUserHourLimit) {
+      logger.log('Have reached hourly follow rate limit, pausing 10 min');
+      await sleep(10 * 60 * 1000);
+    }
   }
 
-  function getNumLikesThisTimeUnit(timeUnit) {
-    const now = new Date().getTime();
-    return prevLikes.filter(u => now - u.time < timeUnit).length
+  async function throttle() {
+    await checkReachedFollowedUserDayLimit();
+    await checkReachedFollowedUserHourLimit();
   }
 
   function hasReachedDailyLikesLimit() {
@@ -177,7 +144,7 @@ module.exports = async (browser, options) => {
   }
 
   function haveRecentlyFollowedUser(username) {
-    const followedUserEntry = prevFollowedUsers[username];
+    const followedUserEntry = getPrevFollowedUser(username);
     if (!followedUserEntry) return false; // We did not previously follow this user, so don't know
     return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
   }
@@ -216,18 +183,20 @@ module.exports = async (browser, options) => {
   }
 
   async function findFollowButton() {
-    const elementHandles = await page.$x(`//header//button[text()='Follow']`);
+    const elementHandles = await page.$x("//header//button[text()='Follow']");
     if (elementHandles.length > 0) return elementHandles[0];
 
-    const elementHandles2 = await page.$x(`//header//button[text()='Follow Back']`);
+    const elementHandles2 = await page.$x("//header//button[text()='Follow Back']");
     if (elementHandles2.length > 0) return elementHandles2[0];
+
+    return undefined;
   }
 
   async function findUnfollowButton() {
-    const elementHandles = await page.$x(`//header//button[text()='Following']`);
+    const elementHandles = await page.$x("//header//button[text()='Following']");
     if (elementHandles.length > 0) return elementHandles[0];
 
-    const elementHandles2 = await page.$x(`//header//button[text()='Requested']`);
+    const elementHandles2 = await page.$x("//header//button[text()='Requested']");
     if (elementHandles2.length > 0) return elementHandles2[0];
 
     const elementHandles3 = await page.$x("//header//button[*//span[@aria-label='Following']]");
@@ -257,7 +226,7 @@ module.exports = async (browser, options) => {
       const elementHandle2 = await findUnfollowButton();
       if (!elementHandle2) logger.log('Failed to follow user (button did not change state)');
 
-      await addFollowedUser({ username, time: new Date().getTime() });
+      await addPrevFollowedUser({ username, time: new Date().getTime() });
     }
 
     await sleep(1000);
@@ -288,16 +257,16 @@ module.exports = async (browser, options) => {
         await sleep(1000);
         const confirmHandle = await findUnfollowConfirmButton();
         if (confirmHandle) await confirmHandle.click();
-  
+
         await sleep(5000);
-  
+
         await checkActionBlocked();
-  
+
         const elementHandle2 = await findFollowButton();
         if (!elementHandle2) throw new Error('Unfollow button did not change state');
       }
 
-      await addUnfollowedUser(res);
+      await addPrevUnfollowedUser(res);
     }
 
     await sleep(1000);
@@ -312,12 +281,12 @@ module.exports = async (browser, options) => {
   }
 
   async function getCurrentUser() {
-    return page.evaluate(() => {
-      return window._sharedData.entry_data.ProfilePage[0].graphql.user; // eslint-disable-line no-undef,no-underscore-dangle,max-len
-      // return JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window.__additionalDataLoaded(\'feed\',')).innerHTML.replace(/^window.__additionalDataLoaded\('feed',({.*})\);$/, '$1'));
-      // return JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window._sharedData')).innerHTML.replace(/^window._sharedData ?= ?({.*});$/, '$1'));
-      // Array.from(document.getElementsByTagName('a')).find(el => el.attributes?.href?.value.includes(`${username}/followers`)).innerText
-    });
+    // eslint-disable-next-line no-underscore-dangle
+    return page.evaluate(() => window._sharedData.entry_data.ProfilePage[0].graphql.user);
+    // eslint-disable-line no-undef,no-underscore-dangle,max-len
+    // return JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window.__additionalDataLoaded(\'feed\',')).innerHTML.replace(/^window.__additionalDataLoaded\('feed',({.*})\);$/, '$1'));
+    // return JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window._sharedData')).innerHTML.replace(/^window._sharedData ?= ?({.*});$/, '$1'));
+    // Array.from(document.getElementsByTagName('a')).find(el => el.attributes?.href?.value.includes(`${username}/followers`)).innerText
   }
 
   async function getFollowersOrFollowing({
@@ -370,9 +339,11 @@ module.exports = async (browser, options) => {
     return outUsers;
   }
 
-  async function likeCurrentUserImagesPageCode({ likeImagesMin, likeImagesMax }) {
+  /* eslint-disable no-undef */
+  async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax }) {
     const allImages = Array.from(document.getElementsByTagName('a')).filter(el => /instagram.com\/p\//.test(el.href));
 
+    // eslint-disable-next-line no-shadow
     function shuffleArray(arrayIn) {
       const array = [...arrayIn];
       for (let i = array.length - 1; i > 0; i -= 1) {
@@ -384,12 +355,12 @@ module.exports = async (browser, options) => {
 
     const imagesShuffled = shuffleArray(allImages);
 
-    const numImagesToLike = Math.floor(Math.random() * (likeImagesMax + 1 - likeImagesMin) + likeImagesMin);
-    
+    const numImagesToLike = Math.floor((Math.random() * ((likeImagesMax + 1) - likeImagesMin)) + likeImagesMin);
+
     instautoLog(`Liking ${numImagesToLike} image(s)`);
 
     const images = imagesShuffled.slice(0, numImagesToLike);
-    
+
     if (images.length < 1) {
       instautoLog('No images to like');
       return;
@@ -397,21 +368,22 @@ module.exports = async (browser, options) => {
 
     for (const image of images) {
       image.click();
-    
+
       await window.instautoSleep(3000);
-    
+
       const dialog = document.querySelector('*[role=dialog]');
-    
+
       if (!dialog) throw new Error('Dialog not found');
-    
+
       const section = Array.from(dialog.querySelectorAll('section')).find(s => s.querySelectorAll('*[aria-label="Like"]')[0] && s.querySelectorAll('*[aria-label="Comment"]')[0]);
-    
+
       if (!section) throw new Error('Like button section not found');
-    
+
       const likeButtonChild = section.querySelectorAll('*[aria-label="Like"]')[0];
-    
+
       if (!likeButtonChild) throw new Error('Like button not found (aria-label)');
-    
+
+      // eslint-disable-next-line no-inner-declarations
       function findClickableParent(el) {
         let elAt = el;
         while (elAt) {
@@ -420,46 +392,51 @@ module.exports = async (browser, options) => {
           }
           elAt = elAt.parentElement;
         }
+        return undefined;
       }
-    
-      const foundClickable = findClickableParent(likeButtonChild);
-    
-      if (!foundClickable) throw new Error('Like button not found');
-    
-      foundClickable.click();
 
-      window.instautoOnImageLiked();
-    
+      const foundClickable = findClickableParent(likeButtonChild);
+
+      if (!foundClickable) throw new Error('Like button not found');
+
+      if (!dryRunIn) {
+        foundClickable.click();
+
+        window.instautoOnImageLiked(image.href);
+      }
+
       await window.instautoSleep(3000);
-    
+
       const closeButtonChild = document.querySelector('button [aria-label=Close]');
-    
+
       if (!closeButtonChild) throw new Error('Close button not found (aria-label)');
-    
+
       const closeButton = findClickableParent(closeButtonChild);
-    
+
       if (!closeButton) throw new Error('Close button not found');
-    
+
       closeButton.click();
-    
+
       await window.instautoSleep(5000);
     }
 
     instautoLog('Done liking images');
   }
+  /* eslint-enable no-undef */
 
-  async function likeCurrentUserImages({ likeImagesMin, likeImagesMax } = {}) {
+
+  async function likeCurrentUserImages({ username, likeImagesMin, likeImagesMax } = {}) {
     if (!likeImagesMin || !likeImagesMax || likeImagesMax < likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
 
     try {
       await page.exposeFunction('instautoSleep', sleep);
       await page.exposeFunction('instautoLog', (...args) => console.log(...args));
-      await page.exposeFunction('instautoOnImageLiked', onImageLiked);
+      await page.exposeFunction('instautoOnImageLiked', (href) => onImageLiked({ username, href }));
     } catch (err) {
       // Ignore already exists error
     }
 
-    await page.evaluate(likeCurrentUserImagesPageCode, { likeImagesMin, likeImagesMax });
+    await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax });
   }
 
   async function followUserFollowers(username, {
@@ -467,14 +444,7 @@ module.exports = async (browser, options) => {
   } = {}) {
     logger.log(`Following up to ${maxFollowsPerUser} followers of ${username}`);
 
-    if (hasReachedFollowedUserDayLimit()) {
-      logger.log('Have reached daily follow rate limit, stopping');
-      return;
-    }
-    if (hasReachedFollowedUserHourLimit()) {
-      logger.log('Have reached hourly follow rate limit, sleeping 10 min');
-      await sleep(10 * 60 * 1000);
-    }
+    await throttle();
 
     let numFollowedForThisUser = 0;
 
@@ -482,7 +452,7 @@ module.exports = async (browser, options) => {
 
     // Check if we have more than enough users that are not previously followed
     const shouldProceed = usersSoFar => (
-      usersSoFar.filter(u => !prevFollowedUsers[u]).length < maxFollowsPerUser + 5 // 5 is just a margin
+      usersSoFar.filter(u => !getPrevFollowedUser(u)).length < maxFollowsPerUser + 5 // 5 is just a margin
     );
     const userData = await getCurrentUser();
     let followers = await getFollowersOrFollowing({
@@ -494,7 +464,7 @@ module.exports = async (browser, options) => {
     logger.log('Followers', followers);
 
     // Filter again
-    followers = followers.filter(f => !prevFollowedUsers[f]);
+    followers = followers.filter(f => !getPrevFollowedUser(f));
 
     for (const follower of followers) {
       try {
@@ -510,7 +480,7 @@ module.exports = async (browser, options) => {
         const followsCount = graphqlUser.edge_follow.count;
         const isPrivate = graphqlUser.is_private;
 
-        logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
+        // logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
 
         const ratio = followedByCount / (followsCount || 1);
 
@@ -522,7 +492,7 @@ module.exports = async (browser, options) => {
           (followUserMinFollowers != null && followedByCount < followUserMinFollowers) ||
           (followUserMinFollowing != null && followsCount < followUserMinFollowing)
         ) {
-          logger.log('User has too many or too few followers or following, skipping');
+          logger.log('User has too many or too few followers or following, skipping.', 'followedByCount:', followedByCount, 'followsCount:', followsCount);
         } else if (
           (followUserRatioMax != null && ratio > followUserRatioMax) ||
           (followUserRatioMin != null && ratio < followUserRatioMin)
@@ -536,12 +506,12 @@ module.exports = async (browser, options) => {
 
           if (!isPrivate && enableLikeImages && !hasReachedDailyLikesLimit()) {
             try {
-              await likeCurrentUserImages({ likeImagesMin, likeImagesMax });
+              await likeCurrentUserImages({ username: follower, likeImagesMin, likeImagesMax });
             } catch (err) {
               logger.error(`Failed to follow user's images ${follower}`, err);
             }
           }
-  
+
           await sleep(20000);
         }
       } catch (err) {
@@ -556,7 +526,8 @@ module.exports = async (browser, options) => {
       throw new Error(`Invalid parameter maxFollowsTotal ${maxFollowsTotal}`);
     }
 
-    // If max is set to lower than the user list, slice off
+
+    // If maxFollowsTotal turns out to be lower than the user list size, slice off the user list
     const usersToFollowFollowersOfSliced = shuffleArray(usersToFollowFollowersOf).slice(0, maxFollowsTotal);
 
     // Round up or we risk following none
@@ -566,12 +537,8 @@ module.exports = async (browser, options) => {
       try {
         await followUserFollowers(username, { maxFollowsPerUser, skipPrivate, enableLikeImages, likeImagesMin, likeImagesMax });
 
-        if (hasReachedFollowedUserDayLimit()) {
-          logger.log('Have reached daily follow rate limit, exiting loop');
-          return;
-        }
-
         await sleep(10 * 60 * 1000);
+        await throttle();
       } catch (err) {
         console.error('Failed to follow user followers, continuing', err);
         await sleep(60 * 1000);
@@ -590,7 +557,7 @@ module.exports = async (browser, options) => {
         const userFound = await navigateToUser(username);
 
         if (!userFound) {
-          await addUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
+          await addPrevUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
           await sleep(3000);
         } else {
           const { noActionTaken } = await unfollowCurrentUser(username);
@@ -602,7 +569,7 @@ module.exports = async (browser, options) => {
             j += 1;
 
             if (j % 10 === 0) {
-              logger.log('Have unfollowed 10 users since last sleep. Sleeping');
+              logger.log('Have unfollowed 10 users since last break. Taking a break');
               await sleep(10 * 60 * 1000, 0.1);
             }
           }
@@ -616,14 +583,7 @@ module.exports = async (browser, options) => {
           return;
         }
 
-        if (hasReachedFollowedUserDayLimit()) {
-          logger.log('Have reached daily unfollow rate limit, stopping');
-          return;
-        }
-        if (hasReachedFollowedUserHourLimit()) {
-          logger.log('Have reached hourly unfollow rate limit, sleeping 10 min');
-          await sleep(10 * 60 * 1000);
-        }
+        await throttle();
       } catch (err) {
         logger.error('Failed to unfollow, continuing with next', err);
       }
@@ -672,7 +632,7 @@ module.exports = async (browser, options) => {
     // logger.log('allFollowing', allFollowing);
 
     const usersToUnfollow = allFollowing.filter((u) => {
-      if (prevFollowedUsers[u]) return false;
+      if (getPrevFollowedUser(u)) return false;
       if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
       return true;
     });
@@ -698,9 +658,9 @@ module.exports = async (browser, options) => {
     // logger.log('allFollowing', allFollowing);
 
     const usersToUnfollow = allFollowing.filter(u =>
-      prevFollowedUsers[u] &&
+      getPrevFollowedUser(u) &&
       !excludeUsers.includes(u) &&
-      (new Date().getTime() - prevFollowedUsers[u].time) / (1000 * 60 * 60 * 24) > ageInDays)
+      (new Date().getTime() - getPrevFollowedUser(u).time) / (1000 * 60 * 60 * 24) > ageInDays)
       .slice(0, limit);
 
     logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
@@ -720,7 +680,7 @@ module.exports = async (browser, options) => {
     });
 
     return allFollowing.filter(u =>
-      !prevFollowedUsers[u] && !excludeUsers.includes(u));
+      !getPrevFollowedUser(u) && !excludeUsers.includes(u));
   }
 
   function getPage() {
@@ -736,9 +696,6 @@ module.exports = async (browser, options) => {
 
   if (enableCookies) await tryLoadCookies();
 
-  await tryLoadDb();
-
-  // logger.log('prevFollowedUsers', prevFollowedUsers);
 
   // Not sure if we can set cookies before having gone to a page
   await page.goto(`${instagramBaseUrl}/`);
@@ -763,7 +720,7 @@ module.exports = async (browser, options) => {
       await page.click('a[href="/accounts/login/?source=auth_switcher"]');
       await sleep(1000);
     } catch (err) {
-      logger.error('Login page button not found, assuming we have login form');
+      logger.warn('Login page button not found, assuming we have login form');
     }
 
     // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
@@ -790,10 +747,14 @@ module.exports = async (browser, options) => {
 
   // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
   async function checkSaveLoginInfo() {
-    const elementHandles = await page.$x('//button[contains(text(), "Save Info")]');
-    if (elementHandles.length === 1) {
-      elementHandles[0].click();
-      await sleep(5000);
+    try {
+      const elementHandles = await page.$x('//button[contains(text(), "Save Info")]');
+      if (elementHandles.length === 1) {
+        elementHandles[0].click();
+        await sleep(5000);
+      }
+    } catch (err) {
+      logger.error('Unable to press "Save login info"', err);
     }
   }
 
@@ -815,6 +776,7 @@ module.exports = async (browser, options) => {
   logger.log(`Have liked ${getNumLikesThisTimeUnit(dayMs)} images in the last 24 hours`);
 
   try {
+    // eslint-disable-next-line no-underscore-dangle
     const detectedUsername = await page.evaluate(() => window._sharedData.config.viewer.username);
     if (detectedUsername) myUsername = detectedUsername;
   } catch (err) {
@@ -834,6 +796,9 @@ module.exports = async (browser, options) => {
     safelyUnfollowUserList,
     getPage,
     followUsersFollowers,
-    likeCurrentUserImages,
   };
 };
+
+Instauto.JSONDB = JSONDB;
+
+module.exports = Instauto;

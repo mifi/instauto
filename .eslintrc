@@ -6,9 +6,16 @@
   "parserOptions": {
     "sourceType": "script"
   },
+  "globals": {
+    "window": true,
+    "document": true,
+  },
   "rules": {
+    "max-len": 0,
+    "arrow-parens": 0,
     "no-console": 0,
     "no-await-in-loop": 0,
+    "object-curly-newline": 0,
     'no-restricted-syntax': [
       'error',
       {
