@@ -66,8 +66,8 @@ const options = {
 
     await instauto.sleep(10 * 60 * 1000);
 
-    // This is used to unfollow people who have been automatically followed
-    // but are not following us back, after some time has passed
+    // This is used to unfollow people - auto-followed AND manually followed -
+    // who are not following us back, after some time has passed
     // (config parameter dontUnfollowUntilTimeElapsed)
     await instauto.unfollowNonMutualFollowers();
 
