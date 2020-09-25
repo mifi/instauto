@@ -2,6 +2,7 @@
 
 const assert = require('assert');
 const fs = require('fs-extra');
+const { join } = require('path');
 const UserAgent = require('user-agents');
 const JSONDB = require('./db');
 
@@ -50,6 +51,9 @@ const Instauto = async (db, browser, options) => {
 
     dryRun = true,
 
+    screenshotOnError = false,
+    screenshotsPath = '.',
+
     logger = console,
   } = options;
 
@@ -69,6 +73,17 @@ const Instauto = async (db, browser, options) => {
 
   // State
   let page;
+
+  async function takeScreenshot() {
+    if (!screenshotOnError) return;
+    try {
+      const fileName = `${new Date().getTime()}.jpg`;
+      logger.log('Taking screenshot', fileName);
+      await page.screenshot({ path: join(screenshotsPath, fileName), type: 'jpeg', quality: 30 });
+    } catch (err) {
+      logger.error('Failed to take screenshot', err);
+    }
+  }
 
   async function tryLoadCookies() {
     try {
@@ -509,6 +524,7 @@ const Instauto = async (db, browser, options) => {
               await likeCurrentUserImages({ username: follower, likeImagesMin, likeImagesMax });
             } catch (err) {
               logger.error(`Failed to follow user's images ${follower}`, err);
+              await takeScreenshot();
             }
           }
 
@@ -541,6 +557,7 @@ const Instauto = async (db, browser, options) => {
         await throttle();
       } catch (err) {
         console.error('Failed to follow user followers, continuing', err);
+        await takeScreenshot();
         await sleep(60 * 1000);
       }
     }
