@@ -289,7 +289,7 @@ const Instauto = async (db, browser, options) => {
     return res;
   }
 
-  const isLoggedIn = async () => (await page.$x('//nav')).length === 2;
+  const isLoggedIn = async () => (await page.$x('//*[@aria-label="Home"]')).length === 1;
 
   async function getPageJson() {
     return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
