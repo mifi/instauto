@@ -183,8 +183,9 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function isActionBlocked() {
-    const elementHandles = await page.$x('//*[contains(text(), "Action Blocked")]');
-    return elementHandles.length > 0;
+    if ((await page.$x('//*[contains(text(), "Action Blocked")]')).length > 0) return true;
+    if ((await page.$x('//*[contains(text(), "Try Again Later")]')).length > 0) return true;
+    return false;
   }
 
   async function checkActionBlocked() {
