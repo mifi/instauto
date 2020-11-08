@@ -228,7 +228,16 @@ const Instauto = async (db, browser, options) => {
   // NOTE: assumes we are on this page
   async function followCurrentUser(username) {
     const elementHandle = await findFollowButton();
-    if (!elementHandle) throw new Error('Follow button not found');
+
+    if (!elementHandle) {
+      if (await findUnfollowButton()) {
+        logger.log('We are already following this user');
+        await sleep(5000);
+        return;
+      }
+
+      throw new Error('Follow button not found');
+    }
 
     logger.log(`Following user ${username}`);
 
@@ -243,6 +252,7 @@ const Instauto = async (db, browser, options) => {
       // Don't want to retry this user over and over in case there is an issue https://github.com/mifi/instauto/issues/33#issuecomment-723217177
       const entry = { username, time: new Date().getTime() };
       if (!elementHandle2) entry.failed = true;
+
       await addPrevFollowedUser(entry);
 
       if (!elementHandle2) {
