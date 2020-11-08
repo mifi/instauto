@@ -462,6 +462,7 @@ const Instauto = async (db, browser, options) => {
   async function likeCurrentUserImages({ username, likeImagesMin, likeImagesMax } = {}) {
     if (!likeImagesMin || !likeImagesMax || likeImagesMax < likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
 
+    logger.log(`Liking ${likeImagesMin}-${likeImagesMax} user images`);
     try {
       await page.exposeFunction('instautoSleep', sleep);
       await page.exposeFunction('instautoLog', (...args) => console.log(...args));
