@@ -727,6 +727,21 @@ const Instauto = async (db, browser, options) => {
   await page.goto(`${instagramBaseUrl}/`);
   await sleep(3000);
 
+  async function tryPressButton(elementHandles, name) {
+    try {
+      if (elementHandles.length === 1) {
+        logger.log(`Pressing button: ${name}`);
+        elementHandles[0].click();
+        await sleep(3000);
+      }
+    } catch (err) {
+      logger.warn(`Failed to press button: ${name}`);
+    }
+  }
+
+
+  await tryPressButton(await page.$x('//button[text()="Accept"]'), 'Accept cookies dialog');
+
   if (!(await isLoggedIn())) {
     if (!myUsername || !password) {
       await tryDeleteCookies();
@@ -741,15 +756,7 @@ const Instauto = async (db, browser, options) => {
     }
 
     // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
-    try {
-      const elementHandles = await page.$x('//button[contains(text(), "Log In")]');
-      if (elementHandles.length === 1) {
-        elementHandles[0].click();
-        await sleep(1000);
-      }
-    } catch (err) {
-      logger.error('Failed to click login form button');
-    }
+    await tryPressButton(await page.$x('//button[contains(text(), "Log In")]'), 'Login form button');
 
     await page.type('input[name="username"]', myUsername, { delay: 50 });
     await sleep(1000);
@@ -758,33 +765,30 @@ const Instauto = async (db, browser, options) => {
 
     const loginButton = (await page.$x("//button[.//text() = 'Log In']"))[0];
     await loginButton.click();
-  }
 
-  await sleep(3000);
+    await sleep(6000);
 
-  // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
-  async function checkSaveLoginInfo() {
-    try {
-      const elementHandles = await page.$x('//button[contains(text(), "Save Info")]');
-      if (elementHandles.length === 1) {
-        elementHandles[0].click();
-        await sleep(5000);
-      }
-    } catch (err) {
-      logger.error('Unable to press "Save login info"', err);
+    // Sometimes login button gets stuck with a spinner
+    // https://github.com/mifi/SimpleInstaBot/issues/25
+    if (!(await isLoggedIn())) {
+      await sleep(5000);
+      logger.log('Still not logged in, trying to reload loading page');
+      await page.reload();
+      await sleep(5000);
     }
+
+    let warnedAboutLoginFail = false;
+    while (!(await isLoggedIn())) {
+      if (!warnedAboutLoginFail) logger.warn('WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process.');
+      warnedAboutLoginFail = true;
+      await sleep(5000);
+    }
+
+    // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
+    await tryPressButton(await page.$x('//button[contains(text(), "Save Info")]'), 'Save login info dialog');
   }
 
-  await checkSaveLoginInfo();
-
-  let warnedAboutLoginFail = false;
-  while (!(await isLoggedIn())) {
-    if (!warnedAboutLoginFail) logger.warn('WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process.');
-    warnedAboutLoginFail = true;
-    await sleep(5000);
-  }
-
-  await checkSaveLoginInfo();
+  await tryPressButton(await page.$x('//button[contains(text(), "Not Now")]'), 'Turn on Notifications dialog');
 
   await trySaveCookies();
 
