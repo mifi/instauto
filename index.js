@@ -239,9 +239,17 @@ const Instauto = async (db, browser, options) => {
       await checkActionBlocked();
 
       const elementHandle2 = await findUnfollowButton();
-      if (!elementHandle2) logger.log('Failed to follow user (button did not change state)');
 
-      await addPrevFollowedUser({ username, time: new Date().getTime() });
+      // Don't want to retry this user over and over in case there is an issue https://github.com/mifi/instauto/issues/33#issuecomment-723217177
+      const entry = { username, time: new Date().getTime() };
+      if (!elementHandle2) entry.failed = true;
+      await addPrevFollowedUser(entry);
+
+      if (!elementHandle2) {
+        logger.log('Button did not change state - Sleeping');
+        await sleep(60000);
+        throw new Error('Button did not change state');
+      }
     }
 
     await sleep(1000);
