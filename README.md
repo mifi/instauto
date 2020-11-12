@@ -1,4 +1,4 @@
-# instauto
+![](logo.png)
 
 instauto is an Instagram automation/bot library written in modern, clean javascript using Google's Puppeteer. Goal is to be very easy to set up, use, and extend, and obey instagram's limits. Heavily inspired by [InstaPy](https://github.com/CharlesCCC/InstaPy), but I thought it was way too heavy and hard to setup.
 
@@ -75,6 +75,10 @@ pm2 startup
 ```
 
 Now it will run automatically on reboot! 🙌
+
+## Credits
+
+- Icon made by [Freepik](https://www.flaticon.com/authors/freepik) from [www.flaticon.com](https://www.flaticon.com/)
 
 ---
 
