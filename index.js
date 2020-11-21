@@ -186,8 +186,9 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function isActionBlocked() {
-    const elementHandles = await page.$x('//*[contains(text(), "Action Blocked")]');
-    return elementHandles.length > 0;
+    if ((await page.$x('//*[contains(text(), "Action Blocked")]')).length > 0) return true;
+    if ((await page.$x('//*[contains(text(), "Try Again Later")]')).length > 0) return true;
+    return false;
   }
 
   async function checkActionBlocked() {
@@ -231,7 +232,16 @@ const Instauto = async (db, browser, options) => {
   // NOTE: assumes we are on this page
   async function followCurrentUser(username) {
     const elementHandle = await findFollowButton();
-    if (!elementHandle) throw new Error('Follow button not found');
+
+    if (!elementHandle) {
+      if (await findUnfollowButton()) {
+        logger.log('We are already following this user');
+        await sleep(5000);
+        return;
+      }
+
+      throw new Error('Follow button not found');
+    }
 
     logger.log(`Following user ${username}`);
 
@@ -242,13 +252,24 @@ const Instauto = async (db, browser, options) => {
       await checkActionBlocked();
 
       const elementHandle2 = await findUnfollowButton();
+
       if (!elementHandle2) {
         logger.log('Failed to follow user (button did not change state)');
         process.exit(-1)
         // throw new Error('Blocked')
       }
 
-      await addPrevFollowedUser({ username, time: new Date().getTime() });
+      // Don't want to retry this user over and over in case there is an issue https://github.com/mifi/instauto/issues/33#issuecomment-723217177
+      const entry = { username, time: new Date().getTime() };
+      if (!elementHandle2) entry.failed = true;
+
+      await addPrevFollowedUser(entry);
+
+      if (!elementHandle2) {
+        logger.log('Button did not change state - Sleeping');
+        await sleep(60000);
+        throw new Error('Button did not change state');
+      }
     }
 
     await sleep(1000);
@@ -299,7 +320,7 @@ const Instauto = async (db, browser, options) => {
     return res;
   }
 
-  const isLoggedIn = async () => (await page.$x('//nav')).length === 2;
+  const isLoggedIn = async () => (await page.$x('//*[@aria-label="Home"]')).length === 1;
 
   async function getPageJson() {
     return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
@@ -455,6 +476,7 @@ const Instauto = async (db, browser, options) => {
   async function likeCurrentUserImages({ username, likeImagesMin, likeImagesMax } = {}) {
     if (!likeImagesMin || !likeImagesMax || likeImagesMax < likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
 
+    logger.log(`Liking ${likeImagesMin}-${likeImagesMax} user images`);
     try {
       await page.exposeFunction('instautoSleep', sleep);
       await page.exposeFunction('instautoLog', (...args) => console.log(...args));
@@ -788,6 +810,21 @@ const Instauto = async (db, browser, options) => {
   await page.goto(`${instagramBaseUrl}/`);
   await sleep(3000);
 
+  async function tryPressButton(elementHandles, name) {
+    try {
+      if (elementHandles.length === 1) {
+        logger.log(`Pressing button: ${name}`);
+        elementHandles[0].click();
+        await sleep(3000);
+      }
+    } catch (err) {
+      logger.warn(`Failed to press button: ${name}`);
+    }
+  }
+
+
+  await tryPressButton(await page.$x('//button[text()="Accept"]'), 'Accept cookies dialog');
+
   if (!(await isLoggedIn())) {
     if (!myUsername || !password) {
       await tryDeleteCookies();
@@ -802,15 +839,7 @@ const Instauto = async (db, browser, options) => {
     }
 
     // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
-    try {
-      const elementHandles = await page.$x('//button[contains(text(), "Log In")]');
-      if (elementHandles.length === 1) {
-        elementHandles[0].click();
-        await sleep(1000);
-      }
-    } catch (err) {
-      logger.error('Failed to click login form button');
-    }
+    await tryPressButton(await page.$x('//button[contains(text(), "Log In")]'), 'Login form button');
 
     await page.type('input[name="username"]', myUsername, { delay: 30 });
     await sleep(1000);
@@ -819,33 +848,30 @@ const Instauto = async (db, browser, options) => {
 
     const loginButton = (await page.$x("//button[.//text() = 'Log In']"))[0];
     await loginButton.click();
-  }
 
-  await sleep(3000);
+    await sleep(6000);
 
-  // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
-  async function checkSaveLoginInfo() {
-    try {
-      const elementHandles = await page.$x('//button[contains(text(), "Save Info")]');
-      if (elementHandles.length === 1) {
-        elementHandles[0].click();
-        await sleep(5000);
-      }
-    } catch (err) {
-      logger.error('Unable to press "Save login info"', err);
+    // Sometimes login button gets stuck with a spinner
+    // https://github.com/mifi/SimpleInstaBot/issues/25
+    if (!(await isLoggedIn())) {
+      await sleep(5000);
+      logger.log('Still not logged in, trying to reload loading page');
+      await page.reload();
+      await sleep(5000);
     }
+
+    let warnedAboutLoginFail = false;
+    while (!(await isLoggedIn())) {
+      if (!warnedAboutLoginFail) logger.warn('WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process.');
+      warnedAboutLoginFail = true;
+      await sleep(5000);
+    }
+
+    // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
+    await tryPressButton(await page.$x('//button[contains(text(), "Save Info")]'), 'Save login info dialog');
   }
 
-  await checkSaveLoginInfo();
-
-  let warnedAboutLoginFail = false;
-  while (!(await isLoggedIn())) {
-    if (!warnedAboutLoginFail) logger.warn('WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process.');
-    warnedAboutLoginFail = true;
-    await sleep(5000);
-  }
-
-  await checkSaveLoginInfo();
+  await tryPressButton(await page.$x('//button[contains(text(), "Not Now")]'), 'Turn on Notifications dialog');
 
   await trySaveCookies();
 
