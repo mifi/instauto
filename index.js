@@ -25,6 +25,8 @@ const Instauto = async (db, browser, options) => {
   const {
     instagramBaseUrl = 'https://www.instagram.com',
     cookiesPath,
+    followersDbPath,
+    usersToUnfollowsDbPath,
 
     username: myUsernameIn,
     password,
@@ -60,13 +62,14 @@ const Instauto = async (db, browser, options) => {
   let myUsername = myUsernameIn;
 
   assert(cookiesPath);
+  assert(followersDbPath);
   assert(db);
 
-  assert(maxFollowsPerHour * botWorkShiftHours >= maxFollowsPerDay, 'Max follows per hour too low compared to max follows per day');
+  // assert(maxFollowsPerHour * botWorkShiftHours >= maxFollowsPerDay, 'Max follows per hour too low compared to max follows per day');
 
   const {
     addPrevFollowedUser, getPrevFollowedUser, addPrevUnfollowedUser, getLikedPhotosLastTimeUnit,
-    getPrevUnfollowedUsers, getPrevFollowedUsers, addLikedPhoto,
+    getPrevUnfollowedUsers, getPrevFollowedUsers, addLikedPhoto, skippedByAi, skipByAi
   } = db;
 
   const getNumLikesThisTimeUnit = (time) => getLikedPhotosLastTimeUnit(time).length;
@@ -159,7 +162,7 @@ const Instauto = async (db, browser, options) => {
   }
 
   function haveRecentlyFollowedUser(username) {
-    const followedUserEntry = getPrevFollowedUser(username);
+    const followedUserEntry = getPrevFollowedUser(username, 'update');
     if (!followedUserEntry) return false; // We did not previously follow this user, so don't know
     return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
   }
@@ -239,7 +242,11 @@ const Instauto = async (db, browser, options) => {
       await checkActionBlocked();
 
       const elementHandle2 = await findUnfollowButton();
-      if (!elementHandle2) logger.log('Failed to follow user (button did not change state)');
+      if (!elementHandle2) {
+        logger.log('Failed to follow user (button did not change state)');
+        process.exit(-1)
+        // throw new Error('Blocked')
+      }
 
       await addPrevFollowedUser({ username, time: new Date().getTime() });
     }
@@ -278,7 +285,10 @@ const Instauto = async (db, browser, options) => {
         await checkActionBlocked();
 
         const elementHandle2 = await findFollowButton();
-        if (!elementHandle2) throw new Error('Unfollow button did not change state');
+        if (!elementHandle2) {
+          process.exit(-1)
+          throw new Error('Unfollow button did not change state');
+        }
       }
 
       await addPrevUnfollowedUser(res);
@@ -345,12 +355,14 @@ const Instauto = async (db, browser, options) => {
       hasNextPage = pageInfo.has_next_page;
       i += 1;
 
+      await sleep(1000 * 5)
+
       if (shouldProceed()) {
         logger.log(`Has more pages (current ${i})`);
         // await sleep(300);
       }
     }
-
+   
     return outUsers;
   }
 
@@ -455,7 +467,7 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function followUserFollowers(username, {
-    maxFollowsPerUser = 5, skipPrivate = false, enableLikeImages, likeImagesMin, likeImagesMax,
+    maxFollowsPerUser = 5, skipPrivate = false, enableLikeImages, likeImagesMin, likeImagesMax, shouldFollow
   } = {}) {
     logger.log(`Following up to ${maxFollowsPerUser} followers of ${username}`);
 
@@ -467,8 +479,9 @@ const Instauto = async (db, browser, options) => {
 
     // Check if we have more than enough users that are not previously followed
     const shouldProceed = usersSoFar => (
-      usersSoFar.filter(u => !getPrevFollowedUser(u)).length < maxFollowsPerUser + 5 // 5 is just a margin
+      usersSoFar.filter(u => !(getPrevFollowedUser(u) || skippedByAi(u))).length < maxFollowsPerUser + 5 // 5 is just a margin
     );
+    
     const userData = await getCurrentUser();
     let followers = await getFollowersOrFollowing({
       userId: userData.id,
@@ -476,10 +489,10 @@ const Instauto = async (db, browser, options) => {
       shouldProceed,
     });
 
-    logger.log('Followers', followers);
-
     // Filter again
-    followers = followers.filter(f => !getPrevFollowedUser(f));
+    followers = followers.filter(f => !(getPrevFollowedUser(f) || skippedByAi(f)));
+
+    logger.log('Followers', followers);
 
     for (const follower of followers) {
       try {
@@ -495,11 +508,30 @@ const Instauto = async (db, browser, options) => {
         const followsCount = graphqlUser.edge_follow.count;
         const isPrivate = graphqlUser.is_private;
 
+        const toFollow = true
+
+        if (shouldFollow) {
+          const toFollow = await shouldFollow(graphqlUser)
+
+          if (!toFollow) {
+            await skipByAi(follower)
+            continue
+          }
+
+          if (toFollow === 'manual') {
+            await skipByAi(follower)
+            numFollowedForThisUser += 1;
+            continue;
+          }
+        }
+
         // logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
 
         const ratio = followedByCount / (followsCount || 1);
 
-        if (isPrivate && skipPrivate) {
+        if (toFollow === false) {
+          logger.log('Skipping because of the system');
+        } else if (isPrivate && skipPrivate) {
           logger.log('User is private, skipping');
         } else if (
           (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers) ||
@@ -517,7 +549,7 @@ const Instauto = async (db, browser, options) => {
           await followCurrentUser(follower);
           numFollowedForThisUser += 1;
 
-          await sleep(10000);
+          await sleep(20000);
 
           if (!isPrivate && enableLikeImages && !hasReachedDailyLikesLimit()) {
             try {
@@ -528,7 +560,7 @@ const Instauto = async (db, browser, options) => {
             }
           }
 
-          await sleep(20000);
+          await sleep(30000);
         }
       } catch (err) {
         logger.error(`Failed to process follower ${follower}`, err);
@@ -590,6 +622,15 @@ const Instauto = async (db, browser, options) => {
               await sleep(10 * 60 * 1000, 0.1);
             }
           }
+
+          const currentList = JSON.parse(fs.readFileSync(usersToUnfollowsDbPath).toString());
+          const index = currentList.indexOf(username)
+
+          if (index > -1) {
+            currentList.splice(index, 1)
+          }
+
+          fs.writeFileSync(usersToUnfollowsDbPath, JSON.stringify(currentList, null, 2));
         }
 
         i += 1;
@@ -612,27 +653,47 @@ const Instauto = async (db, browser, options) => {
     await navigateToUser(myUsername);
     const userData = await getCurrentUser();
 
-    const allFollowers = await getFollowersOrFollowing({
-      userId: userData.id,
-      getFollowers: true,
-    });
-    const allFollowing = await getFollowersOrFollowing({
-      userId: userData.id,
-      getFollowers: false,
-    });
-    // logger.log('allFollowers:', allFollowers, 'allFollowing:', allFollowing);
+    let usersToUnfollow = []
 
-    const usersToUnfollow = allFollowing.filter((u) => {
-      if (allFollowers.includes(u)) return false; // Follows us
-      if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
-      if (haveRecentlyFollowedUser(u)) {
-        logger.log(`Have recently followed user ${u}, skipping`);
-        return false;
-      }
-      return true;
-    });
+    if (limit === 0) {
+      const allFollowers = await getFollowersOrFollowing({
+        userId: userData.id,
+        getFollowers: true,
+      });
+  
+      fs.writeFileSync(followersDbPath, JSON.stringify(allFollowers, null, 2));
+  
+      const allFollowing = await getFollowersOrFollowing({
+        userId: userData.id,
+        getFollowers: false,
+      });
+      // logger.log('allFollowers:', allFollowers, 'allFollowing:', allFollowing);
+  
+      usersToUnfollow = allFollowing.filter((u) => {
+        if (allFollowers.includes(u)) return false; // Follows us
+        if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
+        if (haveRecentlyFollowedUser(u)) {
+          logger.log(`Have recently followed user ${u}, skipping`);
+          return false;
+        }
+        return true;
+      });
+  
+      logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
+  
+      fs.writeFileSync(usersToUnfollowsDbPath, JSON.stringify(usersToUnfollow, null, 2));
+    } else {
+      usersToUnfollow = JSON.parse(fs.readFileSync(usersToUnfollowsDbPath).toString());
+    }
 
-    logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
+    if (usersToUnfollow.length === 0) {
+      return "nothing"
+    }
+
+    if (limit === 0) {
+      console.log('Returning, manual mode')
+      return
+    }
 
     await safelyUnfollowUserList(usersToUnfollow, limit);
   }
@@ -751,9 +812,9 @@ const Instauto = async (db, browser, options) => {
       logger.error('Failed to click login form button');
     }
 
-    await page.type('input[name="username"]', myUsername, { delay: 50 });
+    await page.type('input[name="username"]', myUsername, { delay: 30 });
     await sleep(1000);
-    await page.type('input[name="password"]', password, { delay: 50 });
+    await page.type('input[name="password"]', password, { delay: 30 });
     await sleep(1000);
 
     const loginButton = (await page.$x("//button[.//text() = 'Log In']"))[0];
@@ -813,6 +874,7 @@ const Instauto = async (db, browser, options) => {
     safelyUnfollowUserList,
     getPage,
     followUsersFollowers,
+    getNumFollowedUsersThisTimeUnit
   };
 };
 
