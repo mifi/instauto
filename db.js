@@ -7,18 +7,25 @@ module.exports = async ({
   followedDbPath,
   unfollowedDbPath,
   likedPhotosDbPath,
+  currentFollowRequestDbPath,
 
   logger = console,
 }) => {
   let prevFollowedUsers = {};
   let prevUnfollowedUsers = {};
   let prevLikedPhotos = [];
+  let currentFollowRequest = [];
 
   async function trySaveDb() {
     try {
       await fs.writeFile(followedDbPath, JSON.stringify(Object.values(prevFollowedUsers)));
       await fs.writeFile(unfollowedDbPath, JSON.stringify(Object.values(prevUnfollowedUsers)));
       await fs.writeFile(likedPhotosDbPath, JSON.stringify(prevLikedPhotos));
+
+      await fs.writeFile(
+        currentFollowRequestDbPath,
+        JSON.stringify(currentFollowRequest)
+      );
     } catch (err) {
       logger.error('Failed to save database');
     }
@@ -52,7 +59,12 @@ module.exports = async ({
 
   function getLikedPhotosLastTimeUnit(timeUnit) {
     const now = new Date().getTime();
-    return getPrevLikedPhotos().filter(u => now - u.time < timeUnit);
+    return getPrevLikedPhotos().filter((u) => now - u.time < timeUnit);
+  }
+
+  async function addCurrentFollowRequest(name) {
+    currentFollowRequest.push({ username: name });
+    await trySaveDb();
   }
 
   async function addLikedPhoto({ username, href, time }) {
@@ -118,5 +130,6 @@ module.exports = async ({
     getTotalFollowedUsers,
     getTotalUnfollowedUsers,
     getTotalLikedPhotos,
+    addCurrentFollowRequest,
   };
 };

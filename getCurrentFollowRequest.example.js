@@ -1,14 +1,14 @@
-'use strict';
+const puppeteer = require("puppeteer"); // eslint-disable-line import/no-extraneous-dependencies
 
-const puppeteer = require('puppeteer'); // eslint-disable-line import/no-extraneous-dependencies
+// const Instauto2 = require("instauto"); // eslint-disable-line import/no-unresolved
 
-const Instauto = require('instauto'); // eslint-disable-line import/no-unresolved
+const Instauto = require("./index");
 
 const options = {
-  cookiesPath: './cookies.json',
+  cookiesPath: "./cookies.json",
 
-  username: 'your-ig-username',
-  password: 'your-ig-password',
+  username: "your ig username",
+  password: "***",
 
   // Global limit that prevents follow or unfollows (total) to exceed this number over a sliding window of one hour:
   maxFollowsPerHour: 20,
@@ -44,48 +44,32 @@ const options = {
   let browser;
 
   try {
-    browser = await puppeteer.launch({ headless: false });
+    browser = await puppeteer.launch({ headless: true });
 
     // Create a database where state will be loaded/saved to
     const instautoDb = await Instauto.JSONDB({
-      // Will store a list of all users that have been followed before, to prevent future re-following.
-      followedDbPath: './followed.json',
+     followedDbPath: './followed.json',
       // Will store all unfollowed users here
       unfollowedDbPath: './unfollowed.json',
       // Will store all likes here
       likedPhotosDbPath: './liked-photos.json',
       // Will store all follow request here
-       currentFollowRequestDbPath: "./current-follow-request.json",
+      currentFollowRequestDbPath: "./current-follow-request.json",
     });
 
     const instauto = await Instauto(instautoDb, browser, options);
 
-    // List of usernames that we should follow the followers of, can be celebrities etc.
-    const usersToFollowFollowersOf = ['lostleblanc', 'sam_kolder'];
-
-    // Now go through each of these and follow a certain amount of their followers
-    await instauto.followUsersFollowers({ usersToFollowFollowersOf, skipPrivate: true, enableLikeImages: true });
+    await instauto.getCurrentFollowRequests();
 
     await instauto.sleep(10 * 60 * 1000);
 
-    // This is used to unfollow people - auto-followed AND manually followed -
-    // who are not following us back, after some time has passed
-    // (config parameter dontUnfollowUntilTimeElapsed)
-    await instauto.unfollowNonMutualFollowers();
-
-    await instauto.sleep(10 * 60 * 1000);
-
-    // Unfollow auto-followed users (regardless of whether they are following us)
-    // after a certain amount of days
-    await instauto.unfollowOldFollowed({ ageInDays: 60 });
-
-    console.log('Done running');
+    await instauto;
 
     await instauto.sleep(30000);
   } catch (err) {
     console.error(err);
   } finally {
-    console.log('Closing browser');
+    console.log("Closing browser");
     if (browser) await browser.close();
   }
 })();

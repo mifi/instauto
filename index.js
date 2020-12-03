@@ -65,8 +65,14 @@ const Instauto = async (db, browser, options) => {
   assert(maxFollowsPerHour * botWorkShiftHours >= maxFollowsPerDay, 'Max follows per hour too low compared to max follows per day');
 
   const {
-    addPrevFollowedUser, getPrevFollowedUser, addPrevUnfollowedUser, getLikedPhotosLastTimeUnit,
-    getPrevUnfollowedUsers, getPrevFollowedUsers, addLikedPhoto,
+    addPrevFollowedUser,
+    getPrevFollowedUser,
+    addPrevUnfollowedUser,
+    getLikedPhotosLastTimeUnit,
+    getPrevUnfollowedUsers,
+    getPrevFollowedUsers,
+    addLikedPhoto,
+    addCurrentFollowRequest,
   } = db;
 
   const getNumLikesThisTimeUnit = (time) => getLikedPhotosLastTimeUnit(time).length;
@@ -321,6 +327,19 @@ const Instauto = async (db, browser, options) => {
     // return JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window.__additionalDataLoaded(\'feed\',')).innerHTML.replace(/^window.__additionalDataLoaded\('feed',({.*})\);$/, '$1'));
     // return JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window._sharedData')).innerHTML.replace(/^window._sharedData ?= ?({.*});$/, '$1'));
     // Array.from(document.getElementsByTagName('a')).find(el => el.attributes?.href?.value.includes(`${username}/followers`)).innerText
+  }
+
+  async function getCurrentFollowRequests() {
+    const url = `${instagramBaseUrl}/accounts/access_tool/current_follow_requests`;
+    await page.goto(url);
+    const usernames = await page.$$eval(".-utLf", (divs) =>
+      divs.map(({ innerText }) => innerText)
+    );
+    await Promise.all(
+      usernames.map(async (name) => {
+        await addCurrentFollowRequest(name);
+      })
+    );
   }
 
   async function getFollowersOrFollowing({
@@ -837,6 +856,7 @@ const Instauto = async (db, browser, options) => {
     safelyUnfollowUserList,
     getPage,
     followUsersFollowers,
+    getCurrentFollowRequests,
   };
 };
 
