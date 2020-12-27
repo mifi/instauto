@@ -329,9 +329,20 @@ const Instauto = async (db, browser, options) => {
     // Array.from(document.getElementsByTagName('a')).find(el => el.attributes?.href?.value.includes(`${username}/followers`)).innerText
   }
 
+ 
   async function getCurrentFollowRequests() {
     const url = `${instagramBaseUrl}/accounts/access_tool/current_follow_requests`;
     await page.goto(url);
+    const viewMoreClass = '.L3NKy';
+    let viewMoreClassExist;
+    viewMoreClassExist = await page.$(viewMoreClass);
+    //keep clicking on view more to load whole list of users
+    while (viewMoreClassExist) {
+      await page.click(viewMore);
+      await page.waitFor(2000);
+      viewMoreClassExist = await page.$(viewMore);
+      if (viewMoreClassExist === null) break;
+    }
     const usernames = await page.$$eval(".-utLf", (divs) =>
       divs.map(({ innerText }) => innerText)
     );
