@@ -338,9 +338,9 @@ const Instauto = async (db, browser, options) => {
     viewMoreClassExist = await page.$(viewMoreClass);
     //keep clicking on view more to load whole list of users
     while (viewMoreClassExist) {
-      await page.click(viewMore);
+      await page.click(viewMoreClass);
       await page.waitFor(2000);
-      viewMoreClassExist = await page.$(viewMore);
+      viewMoreClassExist = await page.$(viewMoreClass);
       if (viewMoreClassExist === null) break;
     }
     const usernames = await page.$$eval(".-utLf", (divs) =>
