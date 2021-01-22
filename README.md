@@ -1,6 +1,6 @@
 ![](logo.png)
 
-instauto is an Instagram automation/bot library written in modern, clean javascript using Google's Puppeteer. Goal is to be very easy to set up, use, and extend, and obey instagram's limits. Heavily inspired by [InstaPy](https://github.com/CharlesCCC/InstaPy), but I thought it was way too heavy and hard to setup.
+instauto is an Instagram automation/bot library written in modern, clean javascript using Google's Puppeteer. Goal is to be very easy to set up, use, and extend, and obey instagram's limits. Heavily inspired by [InstaPy](https://github.com/timgrossmann/InstaPy), but I thought it was way too heavy and hard to setup.
 
 **NEW! 🎉**
 Now there is a GUI application for those who don't want to code: [SimpleInstaBot](https://mifi.github.io/SimpleInstaBot/)
