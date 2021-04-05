@@ -76,6 +76,12 @@ pm2 startup
 
 Now it will run automatically on reboot! 🙌
 
+## Donate 🙈
+
+This project is maintained by me alone. The project will always remain free and open source, but if it's useful for you, consider supporting me. :) It will give me extra motivation to improve it.
+
+[Paypal](https://paypal.me/mifino/usd) | [crypto](https://mifi.no/thanks)
+
 ## Credits
 
 - Icons made by [smalllikeart](https://www.flaticon.com/authors/smalllikeart) & [Freepik](https://www.flaticon.com/authors/freepik) from [www.flaticon.com](https://www.flaticon.com/)
