@@ -31,6 +31,10 @@ const options = {
   // Don't follow users who have more people following them than this:
   followUserMinFollowing: null,
 
+  // NOTE: The dontUnfollowUntilTimeElapsed option is ONLY for the unfollowNonMutualFollowers function
+  // This specifies the time during which the bot should not touch users that it has previously followed (in milliseconds)
+  // After this time has passed, it will be able to unfollow them again.
+  // TODO should remove this option from here
   dontUnfollowUntilTimeElapsed: 3 * 24 * 60 * 60 * 1000,
 
   // Usernames that we should not touch, e.g. your friends and actual followings
@@ -59,9 +63,8 @@ const options = {
     const instauto = await Instauto(instautoDb, browser, options);
 
     // This can be used to unfollow people:
-    // Auto-followed AND manually followed accounts
-    // who are not following us back, after some time has passed
-    // (config option dontUnfollowUntilTimeElapsed)
+    // Will unfollow auto-followed AND manually followed accounts who are not following us back, after some time has passed
+    // The time is specified by config option dontUnfollowUntilTimeElapsed
     // await instauto.unfollowNonMutualFollowers();
     // await instauto.sleep(10 * 60 * 1000);
 
