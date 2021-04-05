@@ -58,24 +58,33 @@ const options = {
 
     const instauto = await Instauto(instautoDb, browser, options);
 
+    // This can be used to unfollow people:
+    // Auto-followed AND manually followed accounts
+    // who are not following us back, after some time has passed
+    // (config option dontUnfollowUntilTimeElapsed)
+    // await instauto.unfollowNonMutualFollowers();
+    // await instauto.sleep(10 * 60 * 1000);
+
+    // Unfollow previously auto-followed users (regardless of whether or not they are following us back)
+    // after a certain amount of days (2 weeks)
+    // Leave room to do following after this too (unfollow 2/3 of maxFollowsPerDay)
+    const unfollowedCount = await instauto.unfollowOldFollowed({ ageInDays: 14, limit: options.maxFollowsPerDay * (2 / 3) });
+
+    if (unfollowedCount > 0) await instauto.sleep(10 * 60 * 1000);
+
     // List of usernames that we should follow the followers of, can be celebrities etc.
     const usersToFollowFollowersOf = ['lostleblanc', 'sam_kolder'];
 
     // Now go through each of these and follow a certain amount of their followers
-    await instauto.followUsersFollowers({ usersToFollowFollowersOf, skipPrivate: true, enableLikeImages: true });
+    await instauto.followUsersFollowers({
+      usersToFollowFollowersOf,
+      maxFollowsTotal: options.maxFollowsPerDay - unfollowedCount,
+      skipPrivate: true,
+      enableLikeImages: true,
+      likeImagesMax: 3,
+    });
 
     await instauto.sleep(10 * 60 * 1000);
-
-    // This is used to unfollow people - auto-followed AND manually followed -
-    // who are not following us back, after some time has passed
-    // (config parameter dontUnfollowUntilTimeElapsed)
-    await instauto.unfollowNonMutualFollowers();
-
-    await instauto.sleep(10 * 60 * 1000);
-
-    // Unfollow auto-followed users (regardless of whether they are following us)
-    // after a certain amount of days
-    await instauto.unfollowOldFollowed({ ageInDays: 60 });
 
     console.log('Done running');
 
