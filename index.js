@@ -549,6 +549,7 @@ const Instauto = async (db, browser, options) => {
           }
 
           await sleep(20000);
+          await throttle();
         }
       } catch (err) {
         logger.error(`Failed to process follower ${follower}`, err);
