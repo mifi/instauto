@@ -760,7 +760,7 @@ const Instauto = async (db, browser, options) => {
   }
 
 
-  await tryPressButton(await page.$x('//button[text()="Accept"]'), 'Accept cookies dialog');
+  await tryPressButton(await page.$x('//button[contains(text(), "Accept")]'), 'Accept cookies dialog');
 
   if (!(await isLoggedIn())) {
     if (!myUsername || !password) {
