@@ -58,6 +58,8 @@ const options = {
       unfollowedDbPath: './unfollowed.json',
       // Will store all likes here
       likedPhotosDbPath: './liked-photos.json',
+      // Will store all follow request here
+       currentFollowRequestDbPath: "./current-follow-request.json",
     });
 
     const instauto = await Instauto(instautoDb, browser, options);
