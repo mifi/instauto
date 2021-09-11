@@ -73,6 +73,7 @@ const Instauto = async (db, browser, options) => {
 
   // State
   let page;
+  let graphqlUserMissing = false;
 
   async function takeScreenshot() {
     if (!screenshotOnError) return;
@@ -164,9 +165,9 @@ const Instauto = async (db, browser, options) => {
     return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
   }
 
-  async function navigateToUser(username) {
-    logger.log(`Navigating to user ${username}`);
-    const response = await page.goto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
+  async function safeGoto(url) {
+    logger.log(`Goto ${url}`);
+    const response = await page.goto(url);
     await sleep(1000);
     const status = response.status();
     if (status === 200) {
@@ -180,6 +181,49 @@ const Instauto = async (db, browser, options) => {
       throw new Error('Aborted operation due to too many requests'); // TODO retry instead
     }
     throw new Error(`Navigate to user returned status ${response.status()}`);
+  }
+
+  async function navigateToUser(username) {
+    logger.log(`Navigating to user ${username}`);
+    return safeGoto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
+  }
+
+  async function getPageJson() {
+    return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
+  }
+
+  async function navigateToUserAndGetData(username) {
+    // https://github.com/mifi/SimpleInstaBot/issues/36
+    if (graphqlUserMissing) {
+      // https://stackoverflow.com/questions/37593025/instagram-api-get-the-userid
+      // https://stackoverflow.com/questions/17373886/how-can-i-get-a-users-media-from-instagram-without-authenticating-as-a-user
+      const found = await safeGoto(`${instagramBaseUrl}/${encodeURIComponent(username)}?__a=1`);
+      if (!found) throw new Error('User not found');
+
+      const json = await getPageJson();
+
+      const { user } = json.graphql;
+
+      await navigateToUser(username);
+      return user;
+    }
+
+    await navigateToUser(username);
+
+    // eslint-disable-next-line no-underscore-dangle
+    const sharedData = await page.evaluate(() => window._sharedData);
+    try {
+      // eslint-disable-next-line prefer-destructuring
+      return sharedData.entry_data.ProfilePage[0].graphql.user;
+
+      // JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window.__additionalDataLoaded(\'feed\',')).innerHTML.replace(/^window.__additionalDataLoaded\('feed',({.*})\);$/, '$1'));
+      // JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window._sharedData')).innerHTML.replace(/^window._sharedData ?= ?({.*});$/, '$1'));
+      // Array.from(document.getElementsByTagName('a')).find(el => el.attributes?.href?.value.includes(`${username}/followers`)).innerText
+    } catch (err) {
+      logger.warn('Missing graphql in page, falling back to alternative method...');
+      graphqlUserMissing = true; // Store as state so we don't have to do this every time from now on.
+      return navigateToUserAndGetData(username); // Now try again with alternative method
+    }
   }
 
   async function isActionBlocked() {
@@ -309,19 +353,6 @@ const Instauto = async (db, browser, options) => {
   }
 
   const isLoggedIn = async () => (await page.$x('//*[@aria-label="Home"]')).length === 1;
-
-  async function getPageJson() {
-    return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
-  }
-
-  async function getCurrentUser() {
-    // eslint-disable-next-line no-underscore-dangle
-    return page.evaluate(() => window._sharedData.entry_data.ProfilePage[0].graphql.user);
-    // eslint-disable-line no-undef,no-underscore-dangle,max-len
-    // return JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window.__additionalDataLoaded(\'feed\',')).innerHTML.replace(/^window.__additionalDataLoaded\('feed',({.*})\);$/, '$1'));
-    // return JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window._sharedData')).innerHTML.replace(/^window._sharedData ?= ?({.*});$/, '$1'));
-    // Array.from(document.getElementsByTagName('a')).find(el => el.attributes?.href?.value.includes(`${username}/followers`)).innerText
-  }
 
   async function getFollowersOrFollowing({
     userId, getFollowers = false, maxPages, shouldProceed: shouldProceedArg,
@@ -483,13 +514,12 @@ const Instauto = async (db, browser, options) => {
 
     let numFollowedForThisUser = 0;
 
-    await navigateToUser(username);
+    const userData = await navigateToUserAndGetData(username);
 
     // Check if we have more than enough users that are not previously followed
     const shouldProceed = usersSoFar => (
       usersSoFar.filter(u => !getPrevFollowedUser(u)).length < maxFollowsPerUser + 5 // 5 is just a margin
     );
-    const userData = await getCurrentUser();
     let followers = await getFollowersOrFollowing({
       userId: userData.id,
       getFollowers: true,
@@ -508,9 +538,8 @@ const Instauto = async (db, browser, options) => {
           return;
         }
 
-        await navigateToUser(follower);
+        const graphqlUser = await navigateToUserAndGetData(follower);
 
-        const graphqlUser = await getCurrentUser();
         const followedByCount = graphqlUser.edge_followed_by.count;
         const followsCount = graphqlUser.edge_follow.count;
         const isPrivate = graphqlUser.is_private;
@@ -630,8 +659,7 @@ const Instauto = async (db, browser, options) => {
 
   async function unfollowNonMutualFollowers({ limit } = {}) {
     logger.log('Unfollowing non-mutual followers...');
-    await navigateToUser(myUsername);
-    const userData = await getCurrentUser();
+    const userData = await navigateToUserAndGetData(myUsername);
 
     const allFollowers = await getFollowersOrFollowing({
       userId: userData.id,
@@ -660,8 +688,7 @@ const Instauto = async (db, browser, options) => {
 
   async function unfollowAllUnknown({ limit } = {}) {
     logger.log('Unfollowing all except excludes and auto followed');
-    await navigateToUser(myUsername);
-    const userData = await getCurrentUser();
+    const userData = await navigateToUserAndGetData(myUsername);
 
     const allFollowing = await getFollowersOrFollowing({
       userId: userData.id,
@@ -685,9 +712,7 @@ const Instauto = async (db, browser, options) => {
 
     logger.log(`Unfollowing currently followed users who were auto-followed more than ${ageInDays} days ago...`);
 
-    await navigateToUser(myUsername);
-    // await page.goto(`${instagramBaseUrl}/${myUsername}`);
-    const userData = await getCurrentUser();
+    const userData = await navigateToUserAndGetData(myUsername);
 
     const allFollowing = await getFollowersOrFollowing({
       userId: userData.id,
@@ -709,8 +734,7 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function listManuallyFollowedUsers() {
-    await navigateToUser(myUsername);
-    const userData = await getCurrentUser();
+    const userData = await navigateToUserAndGetData(myUsername);
 
     const allFollowing = await getFollowersOrFollowing({
       userId: userData.id,
