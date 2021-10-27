@@ -3,3 +3,8 @@ apps:
     name: instabot
     restart_delay: 60000
     log_date_format: 'YYYY-MM-DD HH:mm Z'
+
+  - script: example-loki.js
+    name: instabot-loki-adapter
+    restart_delay: 60000
+    log_date_format: 'YYYY-MM-DD HH:mm Z'

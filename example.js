@@ -1,8 +1,7 @@
 'use strict';
 
 const puppeteer = require('puppeteer'); // eslint-disable-line import/no-extraneous-dependencies
-
-const Instauto = require('instauto'); // eslint-disable-line import/no-unresolved
+const { Instauto } = require('instauto'); // eslint-disable-line import/no-unresolved
 
 const options = {
   cookiesPath: './cookies.json',
