@@ -830,7 +830,7 @@ const Instauto = async (db, browser, options) => {
     }
 
     // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
-    await tryPressButton(await page.$x('//button[contains(text(), "Save Info")]'), 'Save login info dialog');
+    await tryPressButton(await page.$x('//button[contains(text(), "Save info")]'), 'Save login info dialog');
   }
 
   await tryPressButton(await page.$x('//button[contains(text(), "Not Now")]'), 'Turn on Notifications dialog');
