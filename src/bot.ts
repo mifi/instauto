@@ -5,18 +5,18 @@ import { Browser, ElementHandle, Page } from 'puppeteer';
 import { AbstractDbAdapter, FileDbAdapter, FileDbOptions } from './db_adapters';
 import { BotOptions, UnFollower } from './interfaces';
 import { readFile, unlink, writeFile } from 'fs/promises';
-import { utils } from "./utils";
+import { Utils } from "./utils";
 
 type ShouldProceed = (usersSoFar) => boolean;
 
 // NOTE duplicated inside puppeteer page
 function shuffleArray<T>(arrayIn: T[]): T[] {
-    const array = [...arrayIn];
-    for (let i = array.length - 1; i > 0; i -= 1) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]]; // eslint-disable-line no-param-reassign
-    }
-    return array;
+	const array = [...arrayIn];
+	for (let i = array.length - 1; i > 0; i -= 1) {
+		const j = Math.floor(Math.random() * (i + 1));
+		[array[i], array[j]] = [array[j], array[i]]; // eslint-disable-line no-param-reassign
+	}
+	return array;
 }
 
 const botWorkShiftHours = 16;
@@ -25,873 +25,873 @@ const dayMs = 24 * 60 * 60 * 1000;
 const hourMs = 60 * 60 * 1000;
 
 export async function Instauto(db: AbstractDbAdapter, browser: Browser, options: BotOptions): Promise<any> {
-    const {
-        instagramBaseUrl = 'https://www.instagram.com',
-        cookiesPath,
+	const {
+		instagramBaseUrl = 'https://www.instagram.com',
+		cookiesPath,
 
-        username: myUsernameIn,
-        password,
-        enableCookies = true,
+		username: myUsernameIn,
+		password,
+		enableCookies = true,
 
-        randomizeUserAgent = true,
-        userAgent,
+		randomizeUserAgent = true,
+		userAgent,
 
-        maxFollowsPerHour = 20,
-        maxFollowsPerDay = 150,
+		maxFollowsPerHour = 20,
+		maxFollowsPerDay = 150,
 
-        maxLikesPerDay = 50,
+		maxLikesPerDay = 50,
 
-        followUserRatioMin = 0.2,
-        followUserRatioMax = 4.0,
-        followUserMaxFollowers = null,
-        followUserMaxFollowing = null,
-        followUserMinFollowers = null,
-        followUserMinFollowing = null,
+		followUserRatioMin = 0.2,
+		followUserRatioMax = 4.0,
+		followUserMaxFollowers = null,
+		followUserMaxFollowing = null,
+		followUserMinFollowers = null,
+		followUserMinFollowing = null,
 
-        dontUnfollowUntilTimeElapsed = 3 * 24 * 60 * 60 * 1000,
+		dontUnfollowUntilTimeElapsed = 3 * 24 * 60 * 60 * 1000,
 
-        excludeUsers = [],
+		excludeUsers = [],
 
-        dryRun = true,
+		dryRun = true,
 
-        screenshotOnError = false,
-        screenshotsPath = '.',
+		screenshotOnError = false,
+		screenshotsPath = '.',
 
-        logger = console,
-    } = options;
+		logger = console,
+	} = options;
 
-    let myUsername = myUsernameIn;
+	let myUsername = myUsernameIn;
 
-    assert(cookiesPath);
-    assert(db);
+	assert(cookiesPath);
+	assert(db);
 
-    assert(maxFollowsPerHour * botWorkShiftHours >= maxFollowsPerDay, 'Max follows per hour too low compared to max follows per day');
+	assert(maxFollowsPerHour * botWorkShiftHours >= maxFollowsPerDay, 'Max follows per hour too low compared to max follows per day');
 
-    const getNumLikesThisTimeUnit = async (time: number): Promise<number> => {
-        return (await db.getLikedPhotosLastTimeUnit(time)).length;
-    };
+	const getNumLikesThisTimeUnit = async (time: number): Promise<number> => {
+		return (await db.getLikedPhotosLastTimeUnit(time)).length;
+	};
 
-    // State
-    let graphqlUserMissing = false;
+	// State
+	let graphqlUserMissing = false;
 
-    async function takeScreenshot(): Promise<void> {
-        if (!screenshotOnError) return;
-        try {
-            const fileName = `${new Date().getTime()}.jpg`;
-            logger.log('Taking screenshot', fileName);
-            await page.screenshot({ path: join(screenshotsPath, fileName), type: 'jpeg', quality: 30 });
-        } catch (err) {
-            logger.error('Failed to take screenshot', err);
-        }
-    }
+	async function takeScreenshot(): Promise<void> {
+		if (!screenshotOnError) return;
+		try {
+			const fileName = `${new Date().getTime()}.jpg`;
+			logger.log('Taking screenshot', fileName);
+			await page.screenshot({ path: join(screenshotsPath, fileName), type: 'jpeg', quality: 30 });
+		} catch (err) {
+			logger.error('Failed to take screenshot', err);
+		}
+	}
 
-    async function tryLoadCookies(): Promise<void> {
-        try {
-            const cookiesBuffer = await readFile(cookiesPath);
-            const cookies = JSON.parse(cookiesBuffer.toString());
-            for (const cookie of cookies) {
-                if (cookie.name !== 'ig_lang') await page.setCookie(cookie);
-            }
-        } catch (err) {
-            logger.error('No cookies found');
-        }
-    }
+	async function tryLoadCookies(): Promise<void> {
+		try {
+			const cookiesBuffer = await readFile(cookiesPath);
+			const cookies = JSON.parse(cookiesBuffer.toString());
+			for (const cookie of cookies) {
+				if (cookie.name !== 'ig_lang') await page.setCookie(cookie);
+			}
+		} catch (err) {
+			logger.error('No cookies found');
+		}
+	}
 
-    async function trySaveCookies(): Promise<void> {
-        try {
-            logger.log('Saving cookies');
-            const cookies = await page.cookies();
+	async function trySaveCookies(): Promise<void> {
+		try {
+			logger.log('Saving cookies');
+			const cookies = await page.cookies();
 
-            await writeFile(cookiesPath, JSON.stringify(cookies, null, 2));
-        } catch (err) {
-            logger.error('Failed to save cookies');
-        }
-    }
+			await writeFile(cookiesPath, JSON.stringify(cookies, null, 2));
+		} catch (err) {
+			logger.error('Failed to save cookies');
+		}
+	}
 
-    async function tryDeleteCookies(): Promise<void> {
-        try {
-            logger.log('Deleting cookies');
-            await unlink(cookiesPath);
-        } catch (err) {
-            logger.error('No cookies to delete');
-        }
-    }
+	async function tryDeleteCookies(): Promise<void> {
+		try {
+			logger.log('Deleting cookies');
+			await unlink(cookiesPath);
+		} catch (err) {
+			logger.error('No cookies to delete');
+		}
+	}
 
-    const sleep = (ms: number, dev = 1): Promise<void> => {
-        const msWithDev = ((Math.random() * dev) + 1) * ms;
-        logger.log('Waiting', Math.round(msWithDev / 1000), 'sec');
-        return new Promise(resolve => setTimeout(resolve, msWithDev));
-    };
+	const sleep = (ms: number, dev = 1): Promise<void> => {
+		const msWithDev = ((Math.random() * dev) + 1) * ms;
+		logger.log('Waiting', Math.round(msWithDev / 1000), 'sec');
+		return new Promise(resolve => setTimeout(resolve, msWithDev));
+	};
 
-    async function onImageLiked({ username, href }: { username: string; href: string; }): Promise<void> {
-        await db.addLikedPhoto({ username, href, time: new Date().getTime() });
-    }
+	async function onImageLiked({ username, href }: { username: string; href: string; }): Promise<void> {
+		await db.addLikedPhoto({ username, href, time: new Date().getTime() });
+	}
 
-    async function getNumFollowedUsersThisTimeUnit(timeUnit: number): Promise<number> {
-        return (await db.getFollowedLastTimeUnit(timeUnit)).length
+	async function getNumFollowedUsersThisTimeUnit(timeUnit: number): Promise<number> {
+		return (await db.getFollowedLastTimeUnit(timeUnit)).length
             + (await db.getUnfollowedLastTimeUnit(timeUnit)).length;
-    }
+	}
 
-    async function checkReachedFollowedUserDayLimit(): Promise<void> {
-        const reachedFollowedUserDayLimit = (await getNumFollowedUsersThisTimeUnit(dayMs)) >= maxFollowsPerDay;
-        if (reachedFollowedUserDayLimit) {
-            logger.log('Have reached daily follow/unfollow limit, waiting 10 min');
-            await sleep(10 * 60 * 1000);
-        }
-    }
+	async function checkReachedFollowedUserDayLimit(): Promise<void> {
+		const reachedFollowedUserDayLimit = (await getNumFollowedUsersThisTimeUnit(dayMs)) >= maxFollowsPerDay;
+		if (reachedFollowedUserDayLimit) {
+			logger.log('Have reached daily follow/unfollow limit, waiting 10 min');
+			await sleep(10 * 60 * 1000);
+		}
+	}
 
-    async function checkReachedFollowedUserHourLimit(): Promise<void> {
-        const hasReachedFollowedUserHourLimit = (await getNumFollowedUsersThisTimeUnit(hourMs)) >= maxFollowsPerHour;
-        if (hasReachedFollowedUserHourLimit) {
-            logger.log('Have reached hourly follow rate limit, pausing 10 min');
-            await sleep(10 * 60 * 1000);
-        }
-    }
+	async function checkReachedFollowedUserHourLimit(): Promise<void> {
+		const hasReachedFollowedUserHourLimit = (await getNumFollowedUsersThisTimeUnit(hourMs)) >= maxFollowsPerHour;
+		if (hasReachedFollowedUserHourLimit) {
+			logger.log('Have reached hourly follow rate limit, pausing 10 min');
+			await sleep(10 * 60 * 1000);
+		}
+	}
 
-    async function throttle(): Promise<void> {
-        await checkReachedFollowedUserDayLimit();
-        await checkReachedFollowedUserHourLimit();
-    }
+	async function throttle(): Promise<void> {
+		await checkReachedFollowedUserDayLimit();
+		await checkReachedFollowedUserHourLimit();
+	}
 
-    async function hasReachedDailyLikesLimit(): Promise<boolean> {
-        return await getNumLikesThisTimeUnit(dayMs) >= maxLikesPerDay;
-    }
+	async function hasReachedDailyLikesLimit(): Promise<boolean> {
+		return await getNumLikesThisTimeUnit(dayMs) >= maxLikesPerDay;
+	}
 
-    async function haveRecentlyFollowedUser(username: string): Promise<boolean> {
-        const followedUserEntry = await db.getPrevFollowedUser(username);
-        if (!followedUserEntry) return false; // We did not previously follow this user, so don't know
-        return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
-    }
+	async function haveRecentlyFollowedUser(username: string): Promise<boolean> {
+		const followedUserEntry = await db.getPrevFollowedUser(username);
+		if (!followedUserEntry) return false; // We did not previously follow this user, so don't know
+		return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
+	}
 
-    async function safeGoto(url: string): Promise<boolean> {
-        logger.log(`Goto ${url}`);
-        const response = await page.goto(url);
-        await sleep(1000);
-        const status = response.status();
-        if (status === 200) {
-            return true;
-        } else if (status === 404) {
-            logger.log('User not found');
-            return false;
-        } else if (status === 429) {
-            logger.error('Got 429 Too Many Requests, waiting...');
-            await sleep(60 * 60 * 1000);
-            throw new Error('Aborted operation due to too many requests'); // TODO retry instead
-        }
-        throw new Error(`Navigate to user returned status ${response.status()}`);
-    }
+	async function safeGoto(url: string): Promise<boolean> {
+		logger.log(`Goto ${url}`);
+		const response = await page.goto(url);
+		await sleep(1000);
+		const status = response.status();
+		if (status === 200) {
+			return true;
+		} else if (status === 404) {
+			logger.log('User not found');
+			return false;
+		} else if (status === 429) {
+			logger.error('Got 429 Too Many Requests, waiting...');
+			await sleep(60 * 60 * 1000);
+			throw new Error('Aborted operation due to too many requests'); // TODO retry instead
+		}
+		throw new Error(`Navigate to user returned status ${response.status()}`);
+	}
 
-    async function navigateToUser(username: string): Promise<boolean> {
-        logger.log(`Navigating to user ${username}`);
-        return safeGoto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
-    }
+	async function navigateToUser(username: string): Promise<boolean> {
+		logger.log(`Navigating to user ${username}`);
+		return safeGoto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
+	}
 
-    async function getPageJson(): Promise<Record<string, any>> {
-        const jsonValue = await (await (await page.$('pre')).getProperty('textContent')).jsonValue();
-        return JSON.parse(jsonValue as string);
-    }
+	async function getPageJson(): Promise<Record<string, any>> {
+		const jsonValue = await (await (await page.$('pre')).getProperty('textContent')).jsonValue();
+		return JSON.parse(jsonValue as string);
+	}
 
-    async function navigateToUserAndGetData(username: string): Promise<any> {
-        // https://github.com/mifi/SimpleInstaBot/issues/36
-        if (graphqlUserMissing) {
-            // https://stackoverflow.com/questions/37593025/instagram-api-get-the-userid
-            // https://stackoverflow.com/questions/17373886/how-can-i-get-a-users-media-from-instagram-without-authenticating-as-a-user
-            const found = await safeGoto(`${instagramBaseUrl}/${encodeURIComponent(username)}?__a=1`);
-            if (!found) throw new Error('User not found');
+	async function navigateToUserAndGetData(username: string): Promise<any> {
+		// https://github.com/mifi/SimpleInstaBot/issues/36
+		if (graphqlUserMissing) {
+			// https://stackoverflow.com/questions/37593025/instagram-api-get-the-userid
+			// https://stackoverflow.com/questions/17373886/how-can-i-get-a-users-media-from-instagram-without-authenticating-as-a-user
+			const found = await safeGoto(`${instagramBaseUrl}/${encodeURIComponent(username)}?__a=1`);
+			if (!found) throw new Error('User not found');
 
-            const json = await getPageJson();
+			const json = await getPageJson();
 
-            const { user } = json.graphql;
+			const { user } = json.graphql;
 
-            await navigateToUser(username);
-            return user;
-        }
+			await navigateToUser(username);
+			return user;
+		}
 
-        await navigateToUser(username);
+		await navigateToUser(username);
 
-        // eslint-disable-next-line no-underscore-dangle
-        const sharedData = await page.evaluate(() => (window as any)._sharedData);
-        try {
-            // eslint-disable-next-line prefer-destructuring
-            return sharedData.entry_data.ProfilePage[0].graphql.user;
+		// eslint-disable-next-line no-underscore-dangle
+		const sharedData = await page.evaluate(() => (window as any)._sharedData);
+		try {
+			// eslint-disable-next-line prefer-destructuring
+			return sharedData.entry_data.ProfilePage[0].graphql.user;
 
-            // JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window.__additionalDataLoaded(\'feed\',')).innerHTML.replace(/^window.__additionalDataLoaded\('feed',({.*})\);$/, '$1'));
-            // JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window._sharedData')).innerHTML.replace(/^window._sharedData ?= ?({.*});$/, '$1'));
-            // Array.from(document.getElementsByTagName('a')).find(el => el.attributes?.href?.value.includes(`${username}/followers`)).innerText
-        } catch (err) {
-            logger.warn('Missing graphql in page, falling back to alternative method...');
-            graphqlUserMissing = true; // Store as state so we don't have to do this every time from now on.
-            return navigateToUserAndGetData(username); // Now try again with alternative method
-        }
-    }
+			// JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window.__additionalDataLoaded(\'feed\',')).innerHTML.replace(/^window.__additionalDataLoaded\('feed',({.*})\);$/, '$1'));
+			// JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window._sharedData')).innerHTML.replace(/^window._sharedData ?= ?({.*});$/, '$1'));
+			// Array.from(document.getElementsByTagName('a')).find(el => el.attributes?.href?.value.includes(`${username}/followers`)).innerText
+		} catch (err) {
+			logger.warn('Missing graphql in page, falling back to alternative method...');
+			graphqlUserMissing = true; // Store as state so we don't have to do this every time from now on.
+			return navigateToUserAndGetData(username); // Now try again with alternative method
+		}
+	}
 
-    async function isActionBlocked(): Promise<boolean> {
-        if ((await page.$x('//*[contains(text(), "Action Blocked")]')).length > 0) return true;
-        if ((await page.$x('//*[contains(text(), "Try Again Later")]')).length > 0) return true;
-        return false;
-    }
+	async function isActionBlocked(): Promise<boolean> {
+		if ((await page.$x('//*[contains(text(), "Action Blocked")]')).length > 0) return true;
+		if ((await page.$x('//*[contains(text(), "Try Again Later")]')).length > 0) return true;
+		return false;
+	}
 
-    async function checkActionBlocked(): Promise<void | never> {
-        if (await isActionBlocked()) {
-            const hours = 3;
-            logger.error(`Action Blocked, waiting ${hours} hours...`);
-            await tryDeleteCookies();
-            await sleep(hours * 60 * 60 * 1000);
-            throw new Error('Aborted operation due to action blocked');
-        }
-    }
+	async function checkActionBlocked(): Promise<void | never> {
+		if (await isActionBlocked()) {
+			const hours = 3;
+			logger.error(`Action Blocked, waiting ${hours} hours...`);
+			await tryDeleteCookies();
+			await sleep(hours * 60 * 60 * 1000);
+			throw new Error('Aborted operation due to action blocked');
+		}
+	}
 
-    async function findFollowButton(): Promise<ElementHandle> {
-        const elementHandles = await page.$x("//header//button[text()='Follow']");
-        if (elementHandles.length > 0) return elementHandles[0];
+	async function findFollowButton(): Promise<ElementHandle> {
+		const elementHandles = await page.$x("//header//button[text()='Follow']");
+		if (elementHandles.length > 0) return elementHandles[0];
 
-        const elementHandles2 = await page.$x("//header//button[text()='Follow Back']");
-        if (elementHandles2.length > 0) return elementHandles2[0];
+		const elementHandles2 = await page.$x("//header//button[text()='Follow Back']");
+		if (elementHandles2.length > 0) return elementHandles2[0];
 
-        return undefined;
-    }
+		return undefined;
+	}
 
-    async function findUnfollowButton(): Promise<ElementHandle> {
-        const elementHandles = await page.$x("//header//button[text()='Following']");
-        if (elementHandles.length > 0) return elementHandles[0];
+	async function findUnfollowButton(): Promise<ElementHandle> {
+		const elementHandles = await page.$x("//header//button[text()='Following']");
+		if (elementHandles.length > 0) return elementHandles[0];
 
-        const elementHandles2 = await page.$x("//header//button[text()='Requested']");
-        if (elementHandles2.length > 0) return elementHandles2[0];
+		const elementHandles2 = await page.$x("//header//button[text()='Requested']");
+		if (elementHandles2.length > 0) return elementHandles2[0];
 
-        const elementHandles3 = await page.$x("//header//button[*//span[@aria-label='Following']]");
-        if (elementHandles3.length > 0) return elementHandles3[0];
+		const elementHandles3 = await page.$x("//header//button[*//span[@aria-label='Following']]");
+		if (elementHandles3.length > 0) return elementHandles3[0];
 
-        return undefined;
-    }
+		return undefined;
+	}
 
-    async function findUnfollowConfirmButton(): Promise<ElementHandle> {
-        const elementHandles = await page.$x("//button[text()='Unfollow']");
-        return elementHandles[0];
-    }
+	async function findUnfollowConfirmButton(): Promise<ElementHandle> {
+		const elementHandles = await page.$x("//button[text()='Unfollow']");
+		return elementHandles[0];
+	}
 
-    // NOTE: assumes we are on this page
-    async function followCurrentUser(username: string): Promise<void> {
-        const elementHandle = await findFollowButton();
+	// NOTE: assumes we are on this page
+	async function followCurrentUser(username: string): Promise<void> {
+		const elementHandle = await findFollowButton();
 
-        if (!elementHandle) {
-            if (await findUnfollowButton()) {
-                logger.log('We are already following this user');
-                await sleep(5000);
-                return;
-            }
+		if (!elementHandle) {
+			if (await findUnfollowButton()) {
+				logger.log('We are already following this user');
+				await sleep(5000);
+				return;
+			}
 
-            throw new Error('Follow button not found');
-        }
+			throw new Error('Follow button not found');
+		}
 
-        logger.log(`Following user ${username}`);
+		logger.log(`Following user ${username}`);
 
-        if (!dryRun) {
-            await elementHandle.click();
-            await sleep(5000);
+		if (!dryRun) {
+			await elementHandle.click();
+			await sleep(5000);
 
-            await checkActionBlocked();
+			await checkActionBlocked();
 
-            const elementHandle2 = await findUnfollowButton();
+			const elementHandle2 = await findUnfollowButton();
 
-            // Don't want to retry this user over and over in case there is an issue https://github.com/mifi/instauto/issues/33#issuecomment-723217177
-            const entry = { username, time: new Date().getTime() } as UnFollower;
-            if (!elementHandle2) entry.failed = true;
+			// Don't want to retry this user over and over in case there is an issue https://github.com/mifi/instauto/issues/33#issuecomment-723217177
+			const entry = { username, time: new Date().getTime() } as UnFollower;
+			if (!elementHandle2) entry.failed = true;
 
-            await db.addPrevFollowedUser(entry);
+			await db.addPrevFollowedUser(entry);
 
-            if (!elementHandle2) {
-                logger.log('Button did not change state - Sleeping');
-                await sleep(60000);
-                throw new Error('Button did not change state');
-            }
-        }
+			if (!elementHandle2) {
+				logger.log('Button did not change state - Sleeping');
+				await sleep(60000);
+				throw new Error('Button did not change state');
+			}
+		}
 
-        await sleep(1000);
-    }
+		await sleep(1000);
+	}
 
-    // See https://github.com/timgrossmann/InstaPy/pull/2345
-    // https://github.com/timgrossmann/InstaPy/issues/2355
-    async function unfollowCurrentUser(username: string): Promise<UnFollower> {
-        logger.log(`Unfollowing user ${username}`);
+	// See https://github.com/timgrossmann/InstaPy/pull/2345
+	// https://github.com/timgrossmann/InstaPy/issues/2355
+	async function unfollowCurrentUser(username: string): Promise<UnFollower> {
+		logger.log(`Unfollowing user ${username}`);
 
-        const res = { username, time: new Date().getTime() } as UnFollower;
+		const res = { username, time: new Date().getTime() } as UnFollower;
 
-        const elementHandle = await findUnfollowButton();
-        if (!elementHandle) {
-            const elementHandle2 = await findFollowButton();
-            if (elementHandle2) {
-                logger.log('User has been unfollowed already');
-                res.noActionTaken = true;
-            } else {
-                logger.log('Failed to find unfollow button');
-                res.noActionTaken = true;
-            }
-        }
+		const elementHandle = await findUnfollowButton();
+		if (!elementHandle) {
+			const elementHandle2 = await findFollowButton();
+			if (elementHandle2) {
+				logger.log('User has been unfollowed already');
+				res.noActionTaken = true;
+			} else {
+				logger.log('Failed to find unfollow button');
+				res.noActionTaken = true;
+			}
+		}
 
-        if (!dryRun) {
-            if (elementHandle) {
-                await elementHandle.click();
-                await sleep(1000);
-                const confirmHandle = await findUnfollowConfirmButton();
-                if (confirmHandle) await confirmHandle.click();
+		if (!dryRun) {
+			if (elementHandle) {
+				await elementHandle.click();
+				await sleep(1000);
+				const confirmHandle = await findUnfollowConfirmButton();
+				if (confirmHandle) await confirmHandle.click();
 
-                await sleep(5000);
+				await sleep(5000);
 
-                await checkActionBlocked();
+				await checkActionBlocked();
 
-                const elementHandle2 = await findFollowButton();
-                if (!elementHandle2) throw new Error('Unfollow button did not change state');
-            }
+				const elementHandle2 = await findFollowButton();
+				if (!elementHandle2) throw new Error('Unfollow button did not change state');
+			}
 
-            await db.addPrevUnfollowedUser(res);
-        }
+			await db.addPrevUnfollowedUser(res);
+		}
 
-        await sleep(1000);
+		await sleep(1000);
 
-        return res;
-    }
+		return res;
+	}
 
-    const isLoggedIn = async () => (await page.$x('//*[@aria-label="Home"]')).length === 1;
+	const isLoggedIn = async () => (await page.$x('//*[@aria-label="Home"]')).length === 1;
 
-    async function getFollowersOrFollowing({ userId, getFollowers = false, maxPages, shouldProceed: shouldProceedArg }: {
+	async function getFollowersOrFollowing({ userId, getFollowers = false, maxPages, shouldProceed: shouldProceedArg }: {
         userId: number;
         getFollowers: boolean;
         maxPages?: number;
         shouldProceed?: ShouldProceed
     }): Promise<string[]> {
-        const graphqlUrl = `${instagramBaseUrl}/graphql/query`;
-        const followersUrl = `${graphqlUrl}/?query_hash=37479f2b8209594dde7facb0d904896a`;
-        const followingUrl = `${graphqlUrl}/?query_hash=58712303d941c6855d4e888c5f0cd22f`;
+		const graphqlUrl = `${instagramBaseUrl}/graphql/query`;
+		const followersUrl = `${graphqlUrl}/?query_hash=37479f2b8209594dde7facb0d904896a`;
+		const followingUrl = `${graphqlUrl}/?query_hash=58712303d941c6855d4e888c5f0cd22f`;
 
-        const graphqlVariables = {
-            id: userId,
-            first: 50,
-            after: undefined,
-        };
+		const graphqlVariables = {
+			id: userId,
+			first: 50,
+			after: undefined,
+		};
 
-        const outUsers = [];
+		const outUsers = [];
 
-        let hasNextPage = true;
-        let i = 0;
+		let hasNextPage = true;
+		let i = 0;
 
-        const shouldProceed = () => {
-            if (!hasNextPage) return false;
-            const isBelowMaxPages = maxPages === null || maxPages === undefined || i < maxPages;
-            if (shouldProceedArg) return isBelowMaxPages && shouldProceedArg(outUsers);
-            return isBelowMaxPages;
-        };
+		const shouldProceed = () => {
+			if (!hasNextPage) return false;
+			const isBelowMaxPages = maxPages === null || maxPages === undefined || i < maxPages;
+			if (shouldProceedArg) return isBelowMaxPages && shouldProceedArg(outUsers);
+			return isBelowMaxPages;
+		};
 
-        while (shouldProceed()) {
-            const url = `${getFollowers ? followersUrl : followingUrl}&variables=${JSON.stringify(graphqlVariables)}`;
-            // logger.log(url);
-            await page.goto(url);
-            const json = await getPageJson();
+		while (shouldProceed()) {
+			const url = `${getFollowers ? followersUrl : followingUrl}&variables=${JSON.stringify(graphqlVariables)}`;
+			// logger.log(url);
+			await page.goto(url);
+			const json = await getPageJson();
 
-            const subPropName = getFollowers ? 'edge_followed_by' : 'edge_follow';
+			const subPropName = getFollowers ? 'edge_followed_by' : 'edge_follow';
 
-            const pageInfo = json.data.user[subPropName].page_info;
-            const { edges } = json.data.user[subPropName];
+			const pageInfo = json.data.user[subPropName].page_info;
+			const { edges } = json.data.user[subPropName];
 
-            edges.forEach(e => outUsers.push(e.node.username));
+			edges.forEach(e => outUsers.push(e.node.username));
 
-            graphqlVariables.after = pageInfo.end_cursor;
-            hasNextPage = pageInfo.has_next_page;
-            i += 1;
+			graphqlVariables.after = pageInfo.end_cursor;
+			hasNextPage = pageInfo.has_next_page;
+			i += 1;
 
-            if (shouldProceed()) {
-                logger.log(`Has more pages (current ${i})`);
-                // await sleep(300);
-            }
-        }
+			if (shouldProceed()) {
+				logger.log(`Has more pages (current ${i})`);
+				// await sleep(300);
+			}
+		}
 
-        return outUsers;
-    }
+		return outUsers;
+	}
 
-    /* eslint-disable no-undef */
-    async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax }: {
+	/* eslint-disable no-undef */
+	async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax }: {
         dryRun: boolean;
         likeImagesMin: number;
         likeImagesMax: number;
     }): Promise<void> {
-        const allImages = Array.from(document.getElementsByTagName('a')).filter(el => /instagram.com\/p\//.test(el.href));
+		const allImages = Array.from(document.getElementsByTagName('a')).filter(el => /instagram.com\/p\//.test(el.href));
 
-        // eslint-disable-next-line no-shadow
-        function shuffleArray(arrayIn) {
-            const array = [...arrayIn];
-            for (let i = array.length - 1; i > 0; i -= 1) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [array[i], array[j]] = [array[j], array[i]]; // eslint-disable-line no-param-reassign
-            }
-            return array;
-        }
+		// eslint-disable-next-line no-shadow
+		function shuffleArray(arrayIn) {
+			const array = [...arrayIn];
+			for (let i = array.length - 1; i > 0; i -= 1) {
+				const j = Math.floor(Math.random() * (i + 1));
+				[array[i], array[j]] = [array[j], array[i]]; // eslint-disable-line no-param-reassign
+			}
+			return array;
+		}
 
-        const imagesShuffled = shuffleArray(allImages);
+		const imagesShuffled = shuffleArray(allImages);
 
-        const numImagesToLike = Math.floor((Math.random() * ((likeImagesMax + 1) - likeImagesMin)) + likeImagesMin);
+		const numImagesToLike = Math.floor((Math.random() * ((likeImagesMax + 1) - likeImagesMin)) + likeImagesMin);
 
-        (window as any).instautoLog(`Liking ${numImagesToLike} image(s)`);
+		(window as any).instautoLog(`Liking ${numImagesToLike} image(s)`);
 
-        const images = imagesShuffled.slice(0, numImagesToLike);
+		const images = imagesShuffled.slice(0, numImagesToLike);
 
-        if (images.length < 1) {
-            (window as any).instautoLog('No images to like');
-            return;
-        }
+		if (images.length < 1) {
+			(window as any).instautoLog('No images to like');
+			return;
+		}
 
-        for (const image of images) {
-            image.click();
+		for (const image of images) {
+			image.click();
 
-            await (window as any).instautoSleep(3000);
+			await (window as any).instautoSleep(3000);
 
-            const dialog = document.querySelector('*[role=dialog]');
+			const dialog = document.querySelector('*[role=dialog]');
 
-            if (!dialog) throw new Error('Dialog not found');
+			if (!dialog) throw new Error('Dialog not found');
 
-            const section = Array.from(dialog.querySelectorAll('section')).find(s => s.querySelectorAll('*[aria-label="Like"]')[0] && s.querySelectorAll('*[aria-label="Comment"]')[0]);
+			const section = Array.from(dialog.querySelectorAll('section')).find(s => s.querySelectorAll('*[aria-label="Like"]')[0] && s.querySelectorAll('*[aria-label="Comment"]')[0]);
 
-            if (!section) throw new Error('Like button section not found');
+			if (!section) throw new Error('Like button section not found');
 
-            const likeButtonChild = section.querySelectorAll('*[aria-label="Like"]')[0];
+			const likeButtonChild = section.querySelectorAll('*[aria-label="Like"]')[0];
 
-            if (!likeButtonChild) throw new Error('Like button not found (aria-label)');
+			if (!likeButtonChild) throw new Error('Like button not found (aria-label)');
 
-            // eslint-disable-next-line no-inner-declarations
-            function findClickableParent(el: any): any | undefined {
-                let elAt = el;
-                while (elAt) {
-                    if (elAt.click) {
-                        return elAt;
-                    }
-                    elAt = elAt.parentElement;
-                }
-                return undefined;
-            }
+			// eslint-disable-next-line no-inner-declarations
+			function findClickableParent(el: any): any | undefined {
+				let elAt = el;
+				while (elAt) {
+					if (elAt.click) {
+						return elAt;
+					}
+					elAt = elAt.parentElement;
+				}
+				return undefined;
+			}
 
-            const foundClickable = findClickableParent(likeButtonChild);
+			const foundClickable = findClickableParent(likeButtonChild);
 
-            if (!foundClickable) throw new Error('Like button not found');
+			if (!foundClickable) throw new Error('Like button not found');
 
-            if (!dryRunIn) {
-                foundClickable.click();
+			if (!dryRunIn) {
+				foundClickable.click();
 
-                (window as any).instautoOnImageLiked(image.href);
-            }
+				(window as any).instautoOnImageLiked(image.href);
+			}
 
-            await (window as any).instautoSleep(3000);
+			await (window as any).instautoSleep(3000);
 
-            const closeButtonChild = document.querySelector('button [aria-label=Close]');
+			const closeButtonChild = document.querySelector('button [aria-label=Close]');
 
-            if (!closeButtonChild) throw new Error('Close button not found (aria-label)');
+			if (!closeButtonChild) throw new Error('Close button not found (aria-label)');
 
-            const closeButton = findClickableParent(closeButtonChild);
+			const closeButton = findClickableParent(closeButtonChild);
 
-            if (!closeButton) throw new Error('Close button not found');
+			if (!closeButton) throw new Error('Close button not found');
 
-            closeButton.click();
+			closeButton.click();
 
-            await (window as any).instautoSleep(5000);
-        }
+			await (window as any).instautoSleep(5000);
+		}
 
-        (window as any).instautoLog('Done liking images');
-    }
+		(window as any).instautoLog('Done liking images');
+	}
 
-    /* eslint-enable no-undef */
+	/* eslint-enable no-undef */
 
 
-    async function likeCurrentUserImages({ username, likeImagesMin, likeImagesMax }: {
+	async function likeCurrentUserImages({ username, likeImagesMin, likeImagesMax }: {
         username: string;
         likeImagesMin: number;
         likeImagesMax: number;
     }): Promise<void> {
-        if (!likeImagesMin || !likeImagesMax || likeImagesMax < likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
+		if (!likeImagesMin || !likeImagesMax || likeImagesMax < likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
 
-        logger.log(`Liking ${likeImagesMin}-${likeImagesMax} user images`);
-        try {
-            await page.exposeFunction('instautoSleep', sleep);
-            await page.exposeFunction('instautoLog', (...args) => console.log(...args));
-            await page.exposeFunction('instautoOnImageLiked', (href) => onImageLiked({ username, href }));
-        } catch (err) {
-            // Ignore already exists error
-        }
+		logger.log(`Liking ${likeImagesMin}-${likeImagesMax} user images`);
+		try {
+			await page.exposeFunction('instautoSleep', sleep);
+			await page.exposeFunction('instautoLog', (...args) => console.log(...args));
+			await page.exposeFunction('instautoOnImageLiked', (href) => onImageLiked({ username, href }));
+		} catch (err) {
+			// Ignore already exists error
+		}
 
-        await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax });
-    }
+		await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax });
+	}
 
-    async function followUserFollowers(username: string, {
-        maxFollowsPerUser = 5, skipPrivate = false, enableLikeImages, likeImagesMin, likeImagesMax,
-    }: {
+	async function followUserFollowers(username: string, {
+		maxFollowsPerUser = 5, skipPrivate = false, enableLikeImages, likeImagesMin, likeImagesMax,
+	}: {
         maxFollowsPerUser?: number;
         skipPrivate?: boolean;
         enableLikeImages: boolean;
         likeImagesMin: number;
         likeImagesMax: number;
     }) {
-        logger.log(`Following up to ${maxFollowsPerUser} followers of ${username}`);
+		logger.log(`Following up to ${maxFollowsPerUser} followers of ${username}`);
 
-        await throttle();
+		await throttle();
 
-        let numFollowedForThisUser = 0;
+		let numFollowedForThisUser = 0;
 
-        const userData = await navigateToUserAndGetData(username);
+		const userData = await navigateToUserAndGetData(username);
 
-        // Check if we have more than enough users that are not previously followed
-        const shouldProceed = usersSoFar => (
-            usersSoFar.filter(u => !db.getPrevFollowedUser(u)).length < maxFollowsPerUser + 5 // 5 is just a margin
-        );
-        let followers = await getFollowersOrFollowing({
-            userId: userData.id,
-            getFollowers: true,
-            shouldProceed,
-        });
+		// Check if we have more than enough users that are not previously followed
+		const shouldProceed = usersSoFar => (
+			usersSoFar.filter(u => !db.getPrevFollowedUser(u)).length < maxFollowsPerUser + 5 // 5 is just a margin
+		);
+		let followers = await getFollowersOrFollowing({
+			userId: userData.id,
+			getFollowers: true,
+			shouldProceed,
+		});
 
-        logger.log('Followers', followers);
+		logger.log('Followers', followers);
 
-        // Filter again
-        followers = followers.filter(f => !db.getPrevFollowedUser(f));
+		// Filter again
+		followers = followers.filter(f => !db.getPrevFollowedUser(f));
 
-        for (const follower of followers) {
-            try {
-                if (numFollowedForThisUser >= maxFollowsPerUser) {
-                    logger.log('Have reached followed limit for this user, stopping');
-                    return;
-                }
+		for (const follower of followers) {
+			try {
+				if (numFollowedForThisUser >= maxFollowsPerUser) {
+					logger.log('Have reached followed limit for this user, stopping');
+					return;
+				}
 
-                const graphqlUser = await navigateToUserAndGetData(follower);
+				const graphqlUser = await navigateToUserAndGetData(follower);
 
-                const followedByCount = graphqlUser.edge_followed_by.count;
-                const followsCount = graphqlUser.edge_follow.count;
-                const isPrivate = graphqlUser.is_private;
+				const followedByCount = graphqlUser.edge_followed_by.count;
+				const followsCount = graphqlUser.edge_follow.count;
+				const isPrivate = graphqlUser.is_private;
 
-                // logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
+				// logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
 
-                const ratio = followedByCount / (followsCount || 1);
+				const ratio = followedByCount / (followsCount || 1);
 
-                if (isPrivate && skipPrivate) {
-                    logger.log('User is private, skipping');
-                } else if (
-                    (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers) ||
+				if (isPrivate && skipPrivate) {
+					logger.log('User is private, skipping');
+				} else if (
+					(followUserMaxFollowers != null && followedByCount > followUserMaxFollowers) ||
                     (followUserMaxFollowing != null && followsCount > followUserMaxFollowing) ||
                     (followUserMinFollowers != null && followedByCount < followUserMinFollowers) ||
                     (followUserMinFollowing != null && followsCount < followUserMinFollowing)
-                ) {
-                    logger.log('User has too many or too few followers or following, skipping.', 'followedByCount:', followedByCount, 'followsCount:', followsCount);
-                } else if (
-                    (followUserRatioMax != null && ratio > followUserRatioMax) ||
+				) {
+					logger.log('User has too many or too few followers or following, skipping.', 'followedByCount:', followedByCount, 'followsCount:', followsCount);
+				} else if (
+					(followUserRatioMax != null && ratio > followUserRatioMax) ||
                     (followUserRatioMin != null && ratio < followUserRatioMin)
-                ) {
-                    logger.log('User has too many followers compared to follows or opposite, skipping');
-                } else {
-                    await followCurrentUser(follower);
-                    numFollowedForThisUser += 1;
+				) {
+					logger.log('User has too many followers compared to follows or opposite, skipping');
+				} else {
+					await followCurrentUser(follower);
+					numFollowedForThisUser += 1;
 
-                    await sleep(10000);
+					await sleep(10000);
 
-                    if (!isPrivate && enableLikeImages && !hasReachedDailyLikesLimit()) {
-                        try {
-                            await likeCurrentUserImages({ username: follower, likeImagesMin, likeImagesMax });
-                        } catch (err) {
-                            logger.error(`Failed to follow user's images ${follower}`, err);
-                            await takeScreenshot();
-                        }
-                    }
+					if (!isPrivate && enableLikeImages && !hasReachedDailyLikesLimit()) {
+						try {
+							await likeCurrentUserImages({ username: follower, likeImagesMin, likeImagesMax });
+						} catch (err) {
+							logger.error(`Failed to follow user's images ${follower}`, err);
+							await takeScreenshot();
+						}
+					}
 
-                    await sleep(20000);
-                    await throttle();
-                }
-            } catch (err) {
-                logger.error(`Failed to process follower ${follower}`, err);
-                await sleep(20000);
-            }
-        }
-    }
+					await sleep(20000);
+					await throttle();
+				}
+			} catch (err) {
+				logger.error(`Failed to process follower ${follower}`, err);
+				await sleep(20000);
+			}
+		}
+	}
 
-    async function followUsersFollowers({ usersToFollowFollowersOf, maxFollowsTotal = 150, skipPrivate, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
-        if (!maxFollowsTotal || maxFollowsTotal <= 2) {
-            throw new Error(`Invalid parameter maxFollowsTotal ${maxFollowsTotal}`);
-        }
+	async function followUsersFollowers({ usersToFollowFollowersOf, maxFollowsTotal = 150, skipPrivate, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
+		if (!maxFollowsTotal || maxFollowsTotal <= 2) {
+			throw new Error(`Invalid parameter maxFollowsTotal ${maxFollowsTotal}`);
+		}
 
 
-        // If maxFollowsTotal turns out to be lower than the user list size, slice off the user list
-        const usersToFollowFollowersOfSliced = shuffleArray<string>(usersToFollowFollowersOf).slice(0, maxFollowsTotal);
+		// If maxFollowsTotal turns out to be lower than the user list size, slice off the user list
+		const usersToFollowFollowersOfSliced = shuffleArray<string>(usersToFollowFollowersOf).slice(0, maxFollowsTotal);
 
-        // Round up or we risk following none
-        const maxFollowsPerUser = Math.floor(maxFollowsTotal / usersToFollowFollowersOfSliced.length) + 1;
+		// Round up or we risk following none
+		const maxFollowsPerUser = Math.floor(maxFollowsTotal / usersToFollowFollowersOfSliced.length) + 1;
 
-        for (const username of usersToFollowFollowersOfSliced) {
-            try {
-                await followUserFollowers(username, {
-                    maxFollowsPerUser,
-                    skipPrivate,
-                    enableLikeImages,
-                    likeImagesMin,
-                    likeImagesMax,
-                });
+		for (const username of usersToFollowFollowersOfSliced) {
+			try {
+				await followUserFollowers(username, {
+					maxFollowsPerUser,
+					skipPrivate,
+					enableLikeImages,
+					likeImagesMin,
+					likeImagesMax,
+				});
 
-                await sleep(10 * 60 * 1000);
-                await throttle();
-            } catch (err) {
-                console.error('Failed to follow user followers, continuing', err);
-                await takeScreenshot();
-                await sleep(60 * 1000);
-            }
-        }
-    }
+				await sleep(10 * 60 * 1000);
+				await throttle();
+			} catch (err) {
+				console.error('Failed to follow user followers, continuing', err);
+				await takeScreenshot();
+				await sleep(60 * 1000);
+			}
+		}
+	}
 
-    async function safelyUnfollowUserList(usersToUnfollow: string[], limit: number): Promise<void> {
-        logger.log(`Unfollowing ${usersToUnfollow.length} users`);
+	async function safelyUnfollowUserList(usersToUnfollow: string[], limit: number): Promise<void> {
+		logger.log(`Unfollowing ${usersToUnfollow.length} users`);
 
-        let i = 0; // Number of people processed
-        let j = 0; // Number of people actually unfollowed (button pressed)
+		let i = 0; // Number of people processed
+		let j = 0; // Number of people actually unfollowed (button pressed)
 
-        for (const username of usersToUnfollow) {
-            try {
-                const userFound = await navigateToUser(username);
+		for (const username of usersToUnfollow) {
+			try {
+				const userFound = await navigateToUser(username);
 
-                if (!userFound) {
-                    await db.addPrevUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
-                    await sleep(3000);
-                } else {
-                    const { noActionTaken } = await unfollowCurrentUser(username);
+				if (!userFound) {
+					await db.addPrevUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
+					await sleep(3000);
+				} else {
+					const { noActionTaken } = await unfollowCurrentUser(username);
 
-                    if (noActionTaken) {
-                        await sleep(3000);
-                    } else {
-                        await sleep(15000);
-                        j += 1;
+					if (noActionTaken) {
+						await sleep(3000);
+					} else {
+						await sleep(15000);
+						j += 1;
 
-                        if (j % 10 === 0) {
-                            logger.log('Have unfollowed 10 users since last break. Taking a break');
-                            await sleep(10 * 60 * 1000, 0.1);
-                        }
-                    }
-                }
+						if (j % 10 === 0) {
+							logger.log('Have unfollowed 10 users since last break. Taking a break');
+							await sleep(10 * 60 * 1000, 0.1);
+						}
+					}
+				}
 
-                i += 1;
-                logger.log(`Have now unfollowed ${i} users of total ${usersToUnfollow.length}`);
+				i += 1;
+				logger.log(`Have now unfollowed ${i} users of total ${usersToUnfollow.length}`);
 
-                if (limit && j >= limit) {
-                    logger.log(`Have unfollowed limit of ${limit}, stopping`);
-                    return;
-                }
+				if (limit && j >= limit) {
+					logger.log(`Have unfollowed limit of ${limit}, stopping`);
+					return;
+				}
 
-                await throttle();
-            } catch (err) {
-                logger.error('Failed to unfollow, continuing with next', err);
-            }
-        }
-    }
+				await throttle();
+			} catch (err) {
+				logger.error('Failed to unfollow, continuing with next', err);
+			}
+		}
+	}
 
-    async function unfollowNonMutualFollowers({ limit }: { limit?: number; } = {}): Promise<void> {
-        logger.log('Unfollowing non-mutual followers...');
-        const userData = await navigateToUserAndGetData(myUsername);
+	async function unfollowNonMutualFollowers({ limit }: { limit?: number; } = {}): Promise<void> {
+		logger.log('Unfollowing non-mutual followers...');
+		const userData = await navigateToUserAndGetData(myUsername);
 
-        const allFollowers = await getFollowersOrFollowing({
-            userId: userData.id,
-            getFollowers: true,
-        });
-        const allFollowing = await getFollowersOrFollowing({
-            userId: userData.id,
-            getFollowers: false,
-        });
-        // logger.log('allFollowers:', allFollowers, 'allFollowing:', allFollowing);
+		const allFollowers = await getFollowersOrFollowing({
+			userId: userData.id,
+			getFollowers: true,
+		});
+		const allFollowing = await getFollowersOrFollowing({
+			userId: userData.id,
+			getFollowers: false,
+		});
+		// logger.log('allFollowers:', allFollowers, 'allFollowing:', allFollowing);
 
-        const usersToUnfollow = allFollowing.filter((u) => {
-            if (allFollowers.includes(u)) return false; // Follows us
-            if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
-            if (haveRecentlyFollowedUser(u)) {
-                logger.log(`Have recently followed user ${u}, skipping`);
-                return false;
-            }
-            return true;
-        });
+		const usersToUnfollow = allFollowing.filter((u) => {
+			if (allFollowers.includes(u)) return false; // Follows us
+			if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
+			if (haveRecentlyFollowedUser(u)) {
+				logger.log(`Have recently followed user ${u}, skipping`);
+				return false;
+			}
+			return true;
+		});
 
-        logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
+		logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
 
-        await safelyUnfollowUserList(usersToUnfollow, limit);
-    }
+		await safelyUnfollowUserList(usersToUnfollow, limit);
+	}
 
-    async function unfollowAllUnknown({ limit }: { limit?: number; } = {}): Promise<void> {
-        logger.log('Unfollowing all except excludes and auto followed');
-        const userData = await navigateToUserAndGetData(myUsername);
+	async function unfollowAllUnknown({ limit }: { limit?: number; } = {}): Promise<void> {
+		logger.log('Unfollowing all except excludes and auto followed');
+		const userData = await navigateToUserAndGetData(myUsername);
 
-        const allFollowing = await getFollowersOrFollowing({
-            userId: userData.id,
-            getFollowers: false,
-        });
-        // logger.log('allFollowing', allFollowing);
+		const allFollowing = await getFollowersOrFollowing({
+			userId: userData.id,
+			getFollowers: false,
+		});
+		// logger.log('allFollowing', allFollowing);
 
-        const usersToUnfollow = allFollowing.filter((u) => {
-            if (db.getPrevFollowedUser(u)) return false;
-            if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
-            return true;
-        });
+		const usersToUnfollow = allFollowing.filter((u) => {
+			if (db.getPrevFollowedUser(u)) return false;
+			if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
+			return true;
+		});
 
-        logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
+		logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
 
-        await safelyUnfollowUserList(usersToUnfollow, limit);
-    }
+		await safelyUnfollowUserList(usersToUnfollow, limit);
+	}
 
-    async function unfollowOldFollowed({ ageInDays, limit }: { ageInDays?: number; limit?: number; } = {}): Promise<number> {
-        assert(ageInDays);
+	async function unfollowOldFollowed({ ageInDays, limit }: { ageInDays?: number; limit?: number; } = {}): Promise<number> {
+		assert(ageInDays);
 
-        logger.log(`Unfollowing currently followed users who were auto-followed more than ${ageInDays} days ago...`);
+		logger.log(`Unfollowing currently followed users who were auto-followed more than ${ageInDays} days ago...`);
 
-        const userData = await navigateToUserAndGetData(myUsername);
+		const userData = await navigateToUserAndGetData(myUsername);
 
-        const allFollowing = await getFollowersOrFollowing({
-            userId: userData.id,
-            getFollowers: false,
-        });
-        // logger.log('allFollowing', allFollowing);
+		const allFollowing = await getFollowersOrFollowing({
+			userId: userData.id,
+			getFollowers: false,
+		});
+		// logger.log('allFollowing', allFollowing);
 
-        const usersToUnfollow = allFollowing.filter(async u => {
-            return await db.getPrevFollowedUser(u) &&
+		const usersToUnfollow = allFollowing.filter(async u => {
+			return await db.getPrevFollowedUser(u) &&
                 !excludeUsers.includes(u) &&
                 (new Date().getTime() - (await db.getPrevFollowedUser(u)).time) / (1000 * 60 * 60 * 24) > ageInDays;
-        }).slice(0, limit);
+		}).slice(0, limit);
 
-        logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
+		logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
 
-        await safelyUnfollowUserList(usersToUnfollow, limit);
+		await safelyUnfollowUserList(usersToUnfollow, limit);
 
-        return usersToUnfollow.length;
-    }
+		return usersToUnfollow.length;
+	}
 
-    async function listManuallyFollowedUsers(): Promise<string[]> {
-        const userData = await navigateToUserAndGetData(myUsername);
+	async function listManuallyFollowedUsers(): Promise<string[]> {
+		const userData = await navigateToUserAndGetData(myUsername);
 
-        const allFollowing = await getFollowersOrFollowing({
-            userId: userData.id,
-            getFollowers: false,
-        });
+		const allFollowing = await getFollowersOrFollowing({
+			userId: userData.id,
+			getFollowers: false,
+		});
 
-        return allFollowing.filter(u =>
-            !db.getPrevFollowedUser(u) && !excludeUsers.includes(u));
-    }
+		return allFollowing.filter(u =>
+			!db.getPrevFollowedUser(u) && !excludeUsers.includes(u));
+	}
 
-    function getPage(): Page {
-        return page;
-    }
+	function getPage(): Page {
+		return page;
+	}
 
-    const originalPage: Page = await browser.newPage();
-    const page: Page = utils.puppeteerPageOverride(originalPage);
+	const originalPage: Page = await browser.newPage();
+	const page: Page = Utils.puppeteerPageOverride(originalPage);
 
-    if (randomizeUserAgent) {
-        const userAgentGenerated = new UserAgent({ deviceCategory: 'desktop' });
-        await page.setUserAgent(userAgentGenerated.toString());
-    }
-    if (userAgent) await page.setUserAgent(userAgent);
+	if (randomizeUserAgent) {
+		const userAgentGenerated = new UserAgent({ deviceCategory: 'desktop' });
+		await page.setUserAgent(userAgentGenerated.toString());
+	}
+	if (userAgent) await page.setUserAgent(userAgent);
 
-    if (enableCookies) await tryLoadCookies();
-
-
-    // Not sure if we can set cookies before having gone to a page
-    await page.goto(`${instagramBaseUrl}/`);
-    await sleep(1000);
-    logger.log('Setting language to english');
-    await page.setCookie({
-        name: 'ig_lang',
-        value: 'en',
-        path: '/',
-    });
-    await sleep(1000);
-    await page.goto(`${instagramBaseUrl}/`);
-    await sleep(3000);
-
-    async function tryPressButton(elementHandles: ElementHandle[], name: string): Promise<void> {
-        try {
-            if (elementHandles.length === 1) {
-                logger.log(`Pressing button: ${name}`);
-                elementHandles[0].click();
-                await sleep(3000);
-            }
-        } catch (err) {
-            logger.warn(`Failed to press button: ${name}`);
-        }
-    }
+	if (enableCookies) await tryLoadCookies();
 
 
-    await tryPressButton(await page.$x('//button[contains(text(), "Accept")]'), 'Accept cookies dialog');
+	// Not sure if we can set cookies before having gone to a page
+	await page.goto(`${instagramBaseUrl}/`);
+	await sleep(1000);
+	logger.log('Setting language to english');
+	await page.setCookie({
+		name: 'ig_lang',
+		value: 'en',
+		path: '/',
+	});
+	await sleep(1000);
+	await page.goto(`${instagramBaseUrl}/`);
+	await sleep(3000);
 
-    if (!(await isLoggedIn())) {
-        if (!myUsername || !password) {
-            await tryDeleteCookies();
-            throw new Error('No longer logged in. Deleting cookies and aborting. Need to provide username/password');
-        }
+	async function tryPressButton(elementHandles: ElementHandle[], name: string): Promise<void> {
+		try {
+			if (elementHandles.length === 1) {
+				logger.log(`Pressing button: ${name}`);
+				elementHandles[0].click();
+				await sleep(3000);
+			}
+		} catch (err) {
+			logger.warn(`Failed to press button: ${name}`);
+		}
+	}
 
-        try {
-            await page.click('a[href="/accounts/login/?source=auth_switcher"]');
-            await sleep(1000);
-        } catch (err) {
-            logger.warn('Login page button not found, assuming we have login form');
-        }
 
-        // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
-        await tryPressButton(await page.$x('//button[contains(text(), "Log In")]'), 'Login form button');
+	await tryPressButton(await page.$x('//button[contains(text(), "Accept")]'), 'Accept cookies dialog');
 
-        await page.type('input[name="username"]', myUsername, { delay: 50 });
-        await sleep(1000);
-        await page.type('input[name="password"]', password, { delay: 50 });
-        await sleep(1000);
+	if (!(await isLoggedIn())) {
+		if (!myUsername || !password) {
+			await tryDeleteCookies();
+			throw new Error('No longer logged in. Deleting cookies and aborting. Need to provide username/password');
+		}
 
-        const loginButton = (await page.$x("//button[.//text() = 'Log In']"))[0];
-        await loginButton.click();
+		try {
+			await page.click('a[href="/accounts/login/?source=auth_switcher"]');
+			await sleep(1000);
+		} catch (err) {
+			logger.warn('Login page button not found, assuming we have login form');
+		}
 
-        await sleep(6000);
+		// Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
+		await tryPressButton(await page.$x('//button[contains(text(), "Log In")]'), 'Login form button');
 
-        // Sometimes login button gets stuck with a spinner
-        // https://github.com/mifi/SimpleInstaBot/issues/25
-        if (!(await isLoggedIn())) {
-            await sleep(5000);
-            logger.log('Still not logged in, trying to reload loading page');
-            await page.reload();
-            await sleep(5000);
-        }
+		await page.type('input[name="username"]', myUsername, { delay: 50 });
+		await sleep(1000);
+		await page.type('input[name="password"]', password, { delay: 50 });
+		await sleep(1000);
 
-        let warnedAboutLoginFail = false;
-        while (!(await isLoggedIn())) {
-            if (!warnedAboutLoginFail) logger.warn('WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process.');
-            warnedAboutLoginFail = true;
-            await sleep(5000);
-        }
+		const loginButton = (await page.$x("//button[.//text() = 'Log In']"))[0];
+		await loginButton.click();
 
-        // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
-        await tryPressButton(await page.$x('//button[contains(text(), "Save Info")]'), 'Save login info dialog');
-    }
+		await sleep(6000);
 
-    await tryPressButton(await page.$x('//button[contains(text(), "Not Now")]'), 'Turn on Notifications dialog');
+		// Sometimes login button gets stuck with a spinner
+		// https://github.com/mifi/SimpleInstaBot/issues/25
+		if (!(await isLoggedIn())) {
+			await sleep(5000);
+			logger.log('Still not logged in, trying to reload loading page');
+			await page.reload();
+			await sleep(5000);
+		}
 
-    await trySaveCookies();
+		let warnedAboutLoginFail = false;
+		while (!(await isLoggedIn())) {
+			if (!warnedAboutLoginFail) logger.warn('WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process.');
+			warnedAboutLoginFail = true;
+			await sleep(5000);
+		}
 
-    const numLikes = await getNumLikesThisTimeUnit(dayMs);
-    const numFollowedUnfollowedUsersLastHour = await getNumFollowedUsersThisTimeUnit(hourMs);
-    const numFollowedUnfollowedUsersLastDay = await getNumFollowedUsersThisTimeUnit(dayMs);
-    logger.log(`Have followed/unfollowed ${numFollowedUnfollowedUsersLastHour} in the last hour`);
-    logger.log(`Have followed/unfollowed ${numFollowedUnfollowedUsersLastDay} in the last 24 hours`);
-    logger.log(`Have liked ${numLikes} images in the last 24 hours`);
+		// Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
+		await tryPressButton(await page.$x('//button[contains(text(), "Save Info")]'), 'Save login info dialog');
+	}
 
-    try {
-        // eslint-disable-next-line no-underscore-dangle
-        const detectedUsername = await page.evaluate(() => (window as any)._sharedData.config.viewer.username);
-        if (detectedUsername) myUsername = detectedUsername;
-    } catch (err) {
-        logger.error('Failed to detect username', err);
-    }
+	await tryPressButton(await page.$x('//button[contains(text(), "Not Now")]'), 'Turn on Notifications dialog');
 
-    return {
-        followUserFollowers,
-        unfollowNonMutualFollowers,
-        unfollowAllUnknown,
-        unfollowOldFollowed,
-        followCurrentUser,
-        unfollowCurrentUser,
-        sleep,
-        listManuallyFollowedUsers,
-        getFollowersOrFollowing,
-        safelyUnfollowUserList,
-        getPage,
-        followUsersFollowers,
-    };
+	await trySaveCookies();
+
+	const numLikes = await getNumLikesThisTimeUnit(dayMs);
+	const numFollowedUnfollowedUsersLastHour = await getNumFollowedUsersThisTimeUnit(hourMs);
+	const numFollowedUnfollowedUsersLastDay = await getNumFollowedUsersThisTimeUnit(dayMs);
+	logger.log(`Have followed/unfollowed ${numFollowedUnfollowedUsersLastHour} in the last hour`);
+	logger.log(`Have followed/unfollowed ${numFollowedUnfollowedUsersLastDay} in the last 24 hours`);
+	logger.log(`Have liked ${numLikes} images in the last 24 hours`);
+
+	try {
+		// eslint-disable-next-line no-underscore-dangle
+		const detectedUsername = await page.evaluate(() => (window as any)._sharedData.config.viewer.username);
+		if (detectedUsername) myUsername = detectedUsername;
+	} catch (err) {
+		logger.error('Failed to detect username', err);
+	}
+
+	return {
+		followUserFollowers,
+		unfollowNonMutualFollowers,
+		unfollowAllUnknown,
+		unfollowOldFollowed,
+		followCurrentUser,
+		unfollowCurrentUser,
+		sleep,
+		listManuallyFollowedUsers,
+		getFollowersOrFollowing,
+		safelyUnfollowUserList,
+		getPage,
+		followUsersFollowers,
+	};
 }
 
 Instauto.JSONDB = (options: FileDbOptions) => new FileDbAdapter(options);

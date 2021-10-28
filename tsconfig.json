@@ -14,5 +14,5 @@
     "moduleResolution": "Node",
     "incremental": true
   },
-  "exclude": ["example.ts"]
+  "exclude": ["example.ts", "example-loki.js"]
 }

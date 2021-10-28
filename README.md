@@ -38,6 +38,56 @@ See [index.js](https://github.com/mifi/instauto/blob/master/index.js) for availa
 
 See [example.js](https://github.com/mifi/instauto/blob/master/example.js) for example of features
 
+## Data management
+
+The data are stored in json files by default using the `file-db.adapter` internally.
+If you need to override the default behavior you can either choose to use the other adapter provided which is using 
+[lokijs](https://github.com/techfort/LokiJS) or you could create your own adapter to pass to `instauto`.
+
+### Creating your own adapter
+
+To create your own adapter you can have a look to [loki-db.adapter.ts](https://github.com/mifi/instauto/tree/master/src/db_adapters/loki-db.adapter.ts).
+Basically you need to create a class that extend the [AbstractDbAdapter](https://github.com/mifi/instauto/tree/master/src/db_adapters/abstract-db.adapter.ts) 
+such as :
+
+```typescript
+export class MyAdapter extends AbstractDbAdapter {
+  constructor(private readonly instance: YourInstanceType, private readonly logger: Logger) {
+    super();
+  }
+
+  addLikedPhoto({ username, href, time }: LikedPhoto): Promise<void> {
+    // ... You code goes here ...
+  }
+
+  addPrevFollowedUser(follower: Follower): Promise<void> {
+    // ... You code goes here ...  
+  }
+
+  addPrevUnfollowedUser(unfollower: UnFollower): Promise<void> {
+    // ... You code goes here ...
+  }
+
+  getFollowedLastTimeUnit(timeUnit: number): Promise<Follower[]> {
+    // ... You code goes here ...
+  }
+
+  getLikedPhotosLastTimeUnit(timeUnit: number): Promise<LikedPhoto[]> {
+    // ... You code goes here ...
+  }
+
+  getPrevFollowedUser(username: string): Promise<Follower> {
+    // ... You code goes here ...
+  }
+
+  getUnfollowedLastTimeUnit(timeUnit: number): Promise<UnFollower[]> {
+    // ... You code goes here ...
+  }
+}
+```
+
+Yo see how to use you own adapter you can have a look to the [example-loki.js](https://github.com/mifi/instauto/blob/master/example-loki.js)
+
 ## Tips
 - Run this on a machine with a non-cloud IP to avoid being banned
 
