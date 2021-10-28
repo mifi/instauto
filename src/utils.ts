@@ -7,8 +7,10 @@ export class Utils {
     		const containsSensitiveRegexp = new RegExp(/\[contains\(text\(\), (.*)\)\]/);
     		const alphabetLo = 'abcdefghijklmnopqrstuvwxyz';
     		const alphabetUp = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    		expression.replace(containsSensitiveRegexp, `[contains(translate(text(), '${alphabetLo}', '${alphabetUp}'), $1)]`);
-    		return originalXPath.apply(this, expression);
+    		expression = expression.replace(containsSensitiveRegexp, (match: string, p1: string): string => {
+    			return `[contains(translate(text(), '${alphabetUp}', '${alphabetLo}'), ${p1.toLowerCase()})]`
+			});
+    		return originalXPath.apply(this, [expression]);
     	}
     	return page;
 	}
