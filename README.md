@@ -128,7 +128,7 @@ Now it will run automatically on reboot! 🙌
 
 ## Donate 🙈
 
-This project is maintained by me alone. The project will always remain free and open source, but if it's useful for you, consider supporting me. :) It will give me extra motivation to improve it.
+This project is maintained by me and [Adrien de peretti](https://github.com/adrien2p). The project will always remain free and open source, but if it's useful for you, consider supporting me. :) It will give me extra motivation to improve it.
 
 [Paypal](https://paypal.me/mifino/usd) | [crypto](https://mifi.no/thanks)
 
@@ -138,7 +138,7 @@ This project is maintained by me alone. The project will always remain free and 
 
 ---
 
-Made with ❤️ in 🇳🇴
+Made with ❤️ in 🇳🇴 and 🇫🇷
 
 [More apps by mifi.no](https://mifi.no/)
 
