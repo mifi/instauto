@@ -1,7 +1,7 @@
 import assert = require('assert');
 import UserAgent = require('user-agents');
 import { join } from 'path';
-import { Browser, Page } from 'puppeteer';
+import { Browser, ElementHandle, Page } from 'puppeteer';
 import { AbstractDbAdapter, FileDbAdapter, FileDbOptions } from './db_adapters';
 import { BotOptions, UnFollower } from './interfaces';
 import { readFile, unlink, writeFile } from 'fs/promises';
@@ -9,7 +9,7 @@ import { readFile, unlink, writeFile } from 'fs/promises';
 type ShouldProceed = (usersSoFar) => boolean;
 
 // NOTE duplicated inside puppeteer page
-function shuffleArray(arrayIn) {
+function shuffleArray<T>(arrayIn: T[]): T[] {
 	const array = [...arrayIn];
 	for (let i = array.length - 1; i > 0; i -= 1) {
 		const j = Math.floor(Math.random() * (i + 1));
@@ -23,7 +23,7 @@ const botWorkShiftHours = 16;
 const dayMs = 24 * 60 * 60 * 1000;
 const hourMs = 60 * 60 * 1000;
 
-export async function Instauto(db: AbstractDbAdapter, browser: Browser, options: BotOptions) {
+export async function Instauto(db: AbstractDbAdapter, browser: Browser, options: BotOptions): Promise<any> {
 	const {
 		instagramBaseUrl = 'https://www.instagram.com',
 		cookiesPath,
@@ -66,14 +66,14 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 
 	assert(maxFollowsPerHour * botWorkShiftHours >= maxFollowsPerDay, 'Max follows per hour too low compared to max follows per day');
 
-	const getNumLikesThisTimeUnit = async (time) => {
+	const getNumLikesThisTimeUnit = async (time: number): Promise<number> => {
 		return (await db.getLikedPhotosLastTimeUnit(time)).length;
 	};
 
 	// State
 	let graphqlUserMissing = false;
 
-	async function takeScreenshot() {
+	async function takeScreenshot(): Promise<void> {
 		if (!screenshotOnError) return;
 		try {
 			const fileName = `${new Date().getTime()}.jpg`;
@@ -84,7 +84,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		}
 	}
 
-	async function tryLoadCookies() {
+	async function tryLoadCookies(): Promise<void> {
 		try {
 			const cookiesBuffer = await readFile(cookiesPath);
 			const cookies = JSON.parse(cookiesBuffer.toString());
@@ -96,7 +96,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		}
 	}
 
-	async function trySaveCookies() {
+	async function trySaveCookies(): Promise<void> {
 		try {
 			logger.log('Saving cookies');
 			const cookies = await page.cookies();
@@ -107,7 +107,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		}
 	}
 
-	async function tryDeleteCookies() {
+	async function tryDeleteCookies(): Promise<void> {
 		try {
 			logger.log('Deleting cookies');
 			await unlink(cookiesPath);
@@ -116,22 +116,22 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		}
 	}
 
-	const sleep = (ms, dev = 1) => {
+	const sleep = (ms: number, dev = 1): Promise<void> => {
 		const msWithDev = ((Math.random() * dev) + 1) * ms;
 		logger.log('Waiting', Math.round(msWithDev / 1000), 'sec');
 		return new Promise(resolve => setTimeout(resolve, msWithDev));
 	};
 
-	async function onImageLiked({ username, href }) {
+	async function onImageLiked({ username, href }: { username: string; href: string; }): Promise<void> {
 		await db.addLikedPhoto({ username, href, time: new Date().getTime() });
 	}
 
-	async function getNumFollowedUsersThisTimeUnit(timeUnit) {
+	async function getNumFollowedUsersThisTimeUnit(timeUnit: number): Promise<number> {
 		return (await db.getFollowedLastTimeUnit(timeUnit)).length
             + (await db.getUnfollowedLastTimeUnit(timeUnit)).length;
 	}
 
-	async function checkReachedFollowedUserDayLimit() {
+	async function checkReachedFollowedUserDayLimit(): Promise<void> {
 		const reachedFollowedUserDayLimit = (await getNumFollowedUsersThisTimeUnit(dayMs)) >= maxFollowsPerDay;
 		if (reachedFollowedUserDayLimit) {
 			logger.log('Have reached daily follow/unfollow limit, waiting 10 min');
@@ -139,7 +139,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		}
 	}
 
-	async function checkReachedFollowedUserHourLimit() {
+	async function checkReachedFollowedUserHourLimit(): Promise<void> {
 		const hasReachedFollowedUserHourLimit = (await getNumFollowedUsersThisTimeUnit(hourMs)) >= maxFollowsPerHour;
 		if (hasReachedFollowedUserHourLimit) {
 			logger.log('Have reached hourly follow rate limit, pausing 10 min');
@@ -147,22 +147,22 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		}
 	}
 
-	async function throttle() {
+	async function throttle(): Promise<void> {
 		await checkReachedFollowedUserDayLimit();
 		await checkReachedFollowedUserHourLimit();
 	}
 
-	async function hasReachedDailyLikesLimit() {
+	async function hasReachedDailyLikesLimit(): Promise<boolean> {
 		return await getNumLikesThisTimeUnit(dayMs) >= maxLikesPerDay;
 	}
 
-	async function haveRecentlyFollowedUser(username) {
+	async function haveRecentlyFollowedUser(username: string): Promise<boolean> {
 		const followedUserEntry = await db.getPrevFollowedUser(username);
 		if (!followedUserEntry) return false; // We did not previously follow this user, so don't know
 		return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
 	}
 
-	async function safeGoto(url) {
+	async function safeGoto(url: string): Promise<boolean> {
 		logger.log(`Goto ${url}`);
 		const response = await page.goto(url);
 		await sleep(1000);
@@ -180,17 +180,17 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		throw new Error(`Navigate to user returned status ${response.status()}`);
 	}
 
-	async function navigateToUser(username) {
+	async function navigateToUser(username: string): Promise<boolean> {
 		logger.log(`Navigating to user ${username}`);
 		return safeGoto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
 	}
 
-	async function getPageJson() {
+	async function getPageJson(): Promise<Record<string, any>> {
 		const jsonValue = await (await (await page.$('pre')).getProperty('textContent')).jsonValue();
 		return JSON.parse(jsonValue as string);
 	}
 
-	async function navigateToUserAndGetData(username) {
+	async function navigateToUserAndGetData(username: string): Promise<any> {
 		// https://github.com/mifi/SimpleInstaBot/issues/36
 		if (graphqlUserMissing) {
 			// https://stackoverflow.com/questions/37593025/instagram-api-get-the-userid
@@ -224,13 +224,13 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		}
 	}
 
-	async function isActionBlocked() {
+	async function isActionBlocked(): Promise<boolean> {
 		if ((await page.$x('//*[contains(text(), "Action Blocked")]')).length > 0) return true;
 		if ((await page.$x('//*[contains(text(), "Try Again Later")]')).length > 0) return true;
 		return false;
 	}
 
-	async function checkActionBlocked() {
+	async function checkActionBlocked(): Promise<void | never> {
 		if (await isActionBlocked()) {
 			const hours = 3;
 			logger.error(`Action Blocked, waiting ${hours} hours...`);
@@ -240,7 +240,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		}
 	}
 
-	async function findFollowButton() {
+	async function findFollowButton(): Promise<ElementHandle> {
 		const elementHandles = await page.$x("//header//button[text()='Follow']");
 		if (elementHandles.length > 0) return elementHandles[0];
 
@@ -250,7 +250,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		return undefined;
 	}
 
-	async function findUnfollowButton() {
+	async function findUnfollowButton(): Promise<ElementHandle> {
 		const elementHandles = await page.$x("//header//button[text()='Following']");
 		if (elementHandles.length > 0) return elementHandles[0];
 
@@ -263,13 +263,13 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		return undefined;
 	}
 
-	async function findUnfollowConfirmButton() {
+	async function findUnfollowConfirmButton(): Promise<ElementHandle> {
 		const elementHandles = await page.$x("//button[text()='Unfollow']");
 		return elementHandles[0];
 	}
 
 	// NOTE: assumes we are on this page
-	async function followCurrentUser(username) {
+	async function followCurrentUser(username: string): Promise<void> {
 		const elementHandle = await findFollowButton();
 
 		if (!elementHandle) {
@@ -310,7 +310,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 
 	// See https://github.com/timgrossmann/InstaPy/pull/2345
 	// https://github.com/timgrossmann/InstaPy/issues/2355
-	async function unfollowCurrentUser(username) {
+	async function unfollowCurrentUser(username: string): Promise<UnFollower> {
 		logger.log(`Unfollowing user ${username}`);
 
 		const res = { username, time: new Date().getTime() } as UnFollower;
@@ -353,11 +353,11 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 	const isLoggedIn = async () => (await page.$x('//*[@aria-label="Home"]')).length === 1;
 
 	async function getFollowersOrFollowing({ userId, getFollowers = false, maxPages, shouldProceed: shouldProceedArg }: {
-    userId: number;
-    getFollowers: boolean;
-    maxPages?: number;
-    shouldProceed?: ShouldProceed
-  }) {
+        userId: number;
+        getFollowers: boolean;
+        maxPages?: number;
+        shouldProceed?: ShouldProceed
+    }): Promise<string[]> {
 		const graphqlUrl = `${instagramBaseUrl}/graphql/query`;
 		const followersUrl = `${graphqlUrl}/?query_hash=37479f2b8209594dde7facb0d904896a`;
 		const followingUrl = `${graphqlUrl}/?query_hash=58712303d941c6855d4e888c5f0cd22f`;
@@ -407,7 +407,11 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 	}
 
 	/* eslint-disable no-undef */
-	async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax }) {
+	async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax }: {
+        dryRun: boolean;
+        likeImagesMin: number;
+        likeImagesMax: number;
+    }): Promise<void> {
 		const allImages = Array.from(document.getElementsByTagName('a')).filter(el => /instagram.com\/p\//.test(el.href));
 
 		// eslint-disable-next-line no-shadow
@@ -451,7 +455,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 			if (!likeButtonChild) throw new Error('Like button not found (aria-label)');
 
 			// eslint-disable-next-line no-inner-declarations
-			function findClickableParent(el) {
+			function findClickableParent(el: any): any | undefined {
 				let elAt = el;
 				while (elAt) {
 					if (elAt.click) {
@@ -493,7 +497,11 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 	/* eslint-enable no-undef */
 
 
-	async function likeCurrentUserImages({ username, likeImagesMin, likeImagesMax }): Promise<void> {
+	async function likeCurrentUserImages({ username, likeImagesMin, likeImagesMax }: {
+        username: string;
+        likeImagesMin: number;
+        likeImagesMax: number;
+    }): Promise<void> {
 		if (!likeImagesMin || !likeImagesMax || likeImagesMax < likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
 
 		logger.log(`Liking ${likeImagesMin}-${likeImagesMax} user images`);
@@ -508,9 +516,15 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax });
 	}
 
-	async function followUserFollowers(username, {
+	async function followUserFollowers(username: string, {
 		maxFollowsPerUser = 5, skipPrivate = false, enableLikeImages, likeImagesMin, likeImagesMax,
-	}) {
+	}: {
+        maxFollowsPerUser?: number;
+        skipPrivate?: boolean;
+        enableLikeImages: boolean;
+        likeImagesMin: number;
+        likeImagesMax: number;
+    }) {
 		logger.log(`Following up to ${maxFollowsPerUser} followers of ${username}`);
 
 		await throttle();
@@ -597,7 +611,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 
 
 		// If maxFollowsTotal turns out to be lower than the user list size, slice off the user list
-		const usersToFollowFollowersOfSliced = shuffleArray(usersToFollowFollowersOf).slice(0, maxFollowsTotal);
+		const usersToFollowFollowersOfSliced = shuffleArray<string>(usersToFollowFollowersOf).slice(0, maxFollowsTotal);
 
 		// Round up or we risk following none
 		const maxFollowsPerUser = Math.floor(maxFollowsTotal / usersToFollowFollowersOfSliced.length) + 1;
@@ -622,7 +636,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		}
 	}
 
-	async function safelyUnfollowUserList(usersToUnfollow, limit) {
+	async function safelyUnfollowUserList(usersToUnfollow: string[], limit: number): Promise<void> {
 		logger.log(`Unfollowing ${usersToUnfollow.length} users`);
 
 		let i = 0; // Number of people processed
@@ -742,7 +756,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 		return usersToUnfollow.length;
 	}
 
-	async function listManuallyFollowedUsers() {
+	async function listManuallyFollowedUsers(): Promise<string[]> {
 		const userData = await navigateToUserAndGetData(myUsername);
 
 		const allFollowing = await getFollowersOrFollowing({
@@ -754,7 +768,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 			!db.getPrevFollowedUser(u) && !excludeUsers.includes(u));
 	}
 
-	function getPage() {
+	function getPage(): Page {
 		return page;
 	}
 
@@ -781,7 +795,7 @@ export async function Instauto(db: AbstractDbAdapter, browser: Browser, options:
 	await page.goto(`${instagramBaseUrl}/`);
 	await sleep(3000);
 
-	async function tryPressButton(elementHandles, name) {
+	async function tryPressButton(elementHandles: ElementHandle[], name: string): Promise<void> {
 		try {
 			if (elementHandles.length === 1) {
 				logger.log(`Pressing button: ${name}`);
