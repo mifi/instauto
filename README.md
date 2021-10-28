@@ -86,7 +86,7 @@ export class MyAdapter extends AbstractDbAdapter {
 }
 ```
 
-Yo see how to use you own adapter you can have a look to the [example-loki.js](https://github.com/mifi/instauto/blob/master/example-loki.js)
+To see how to use you own adapter you can have a look to the [example-loki.js](https://github.com/mifi/instauto/blob/master/example-loki.js)
 
 ## Tips
 - Run this on a machine with a non-cloud IP to avoid being banned
