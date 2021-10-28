@@ -10,6 +10,7 @@
     "build": "rimraf lib && tsc"
   },
   "author": "Mikael Finstad <finstaden@gmail.com>",
+  "contributors": ["Adrien de Peretti <adrien.deperetti@gmail.com>"],
   "repository": "mifi/instauto",
   "license": "MIT",
   "engines": {
