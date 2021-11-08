@@ -758,19 +758,20 @@ const Instauto = async (db, browser, options) => {
 
   if (enableCookies) await tryLoadCookies();
 
-
-  // Not sure if we can set cookies before having gone to a page
-  await page.goto(`${instagramBaseUrl}/`);
-  await sleep(1000);
-  logger.log('Setting language to english');
-  await page.setCookie({
-    name: 'ig_lang',
-    value: 'en',
-    path: '/',
-  });
-  await sleep(1000);
-  await page.goto(`${instagramBaseUrl}/`);
-  await sleep(3000);
+  async function setLang() {
+    // Not sure if we can set cookies before having gone to a page
+    await page.goto(`${instagramBaseUrl}/`);
+    await sleep(1000);
+    logger.log('Setting language to english');
+    await page.setCookie({
+      name: 'ig_lang',
+      value: 'en',
+      path: '/',
+    });
+    await sleep(1000);
+    await page.goto(`${instagramBaseUrl}/`);
+    await sleep(3000);
+  }
 
   async function tryPressButton(elementHandles, name) {
     try {
@@ -784,6 +785,7 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
+  await setLang();
 
   await tryPressButton(await page.$x('//button[contains(text(), "Accept")]'), 'Accept cookies dialog');
 
@@ -816,7 +818,6 @@ const Instauto = async (db, browser, options) => {
     // Sometimes login button gets stuck with a spinner
     // https://github.com/mifi/SimpleInstaBot/issues/25
     if (!(await isLoggedIn())) {
-      await sleep(5000);
       logger.log('Still not logged in, trying to reload loading page');
       await page.reload();
       await sleep(5000);
@@ -824,10 +825,13 @@ const Instauto = async (db, browser, options) => {
 
     let warnedAboutLoginFail = false;
     while (!(await isLoggedIn())) {
-      if (!warnedAboutLoginFail) logger.warn('WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process.');
+      if (!warnedAboutLoginFail) logger.warn('WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process, or if really logged in, click the Instagram logo in the top left to go to the Home page.');
       warnedAboutLoginFail = true;
       await sleep(5000);
     }
+
+    // In case language gets reset after logging in
+    await setLang();
 
     // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
     await tryPressButton(await page.$x('//button[contains(text(), "Save Info")]'), 'Login info dialog: Save Info');
