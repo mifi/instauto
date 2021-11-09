@@ -758,20 +758,56 @@ const Instauto = async (db, browser, options) => {
 
   if (enableCookies) await tryLoadCookies();
 
-  async function setLang() {
-    // Not sure if we can set cookies before having gone to a page
-    await page.goto(`${instagramBaseUrl}/`);
-    await sleep(1000);
-    logger.log('Setting language to english');
-    await page.setCookie({
-      name: 'ig_lang',
-      value: 'en',
-      path: '/',
-    });
-    await sleep(1000);
-    await page.goto(`${instagramBaseUrl}/`);
-    await sleep(3000);
+  const goHome = async () => page.goto(`${instagramBaseUrl}/`);
+
+  // https://github.com/mifi/SimpleInstaBot/issues/28
+  async function setLang(short, long) {
+    logger.log(`Setting language to ${long} (${short})`);
+
+    // This doesn't seem to always work, hence why it's just a fallback now
+    async function fallbackSetLang() {
+      await goHome();
+      await sleep(1000);
+
+      await page.setCookie({
+        name: 'ig_lang',
+        value: short,
+        path: '/',
+      });
+      await sleep(1000);
+      await goHome();
+      await sleep(3000);
+    }
+
+    try {
+      await sleep(1000);
+      await goHome();
+      await sleep(3000);
+      const elementHandles = await page.$x(`//select[//option[@value='${short}' and text()='${long}']]`);
+      if (elementHandles.length < 1) throw new Error('Language selector not found');
+      logger.log('Found language selector');
+
+      // https://stackoverflow.com/questions/45864516/how-to-select-an-option-from-dropdown-select
+      await page.evaluate((selectElem, short2) => {
+        const optionElem = selectElem.querySelector(`option[value='${short2}']`);
+        optionElem.selected = true;
+        // eslint-disable-next-line no-undef
+        const event = new Event('change', { bubbles: true });
+        selectElem.dispatchEvent(event);
+      }, elementHandles[0], short);
+      logger.log('Selected language');
+
+      await sleep(3000);
+      await goHome();
+      await sleep(1000);
+    } catch (err) {
+      logger.error('Failed to set language, trying fallback (cookie)', err);
+      await fallbackSetLang();
+    }
   }
+
+  const setEnglishLang = async () => setLang('en', 'English');
+  // const setEnglishLang = async () => setLang('de', 'Deutsch');
 
   async function tryPressButton(elementHandles, name) {
     try {
@@ -785,7 +821,7 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
-  await setLang();
+  await setEnglishLang();
 
   await tryPressButton(await page.$x('//button[contains(text(), "Accept")]'), 'Accept cookies dialog');
 
@@ -831,7 +867,7 @@ const Instauto = async (db, browser, options) => {
     }
 
     // In case language gets reset after logging in
-    await setLang();
+    await setEnglishLang();
 
     // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
     await tryPressButton(await page.$x('//button[contains(text(), "Save Info")]'), 'Login info dialog: Save Info');
