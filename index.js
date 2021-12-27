@@ -354,16 +354,12 @@ const Instauto = async (db, browser, options) => {
 
   const isLoggedIn = async () => (await page.$x('//*[@aria-label="Home"]')).length === 1;
 
-  async function getFollowersOrFollowing({
-    userId, getFollowers = false, maxPages, shouldProceed: shouldProceedArg,
-  }) {
-    const graphqlUrl = `${instagramBaseUrl}/graphql/query`;
-    const followersUrl = `${graphqlUrl}/?query_hash=37479f2b8209594dde7facb0d904896a`;
-    const followingUrl = `${graphqlUrl}/?query_hash=58712303d941c6855d4e888c5f0cd22f`;
+  async function graphqlQueryUser({ queryHash, getResponseProp, maxPages, shouldProceed: shouldProceedArg, graphqlVariables: graphqlVariablesIn }) {
+    const graphqlUrl = `${instagramBaseUrl}/graphql/query/?query_hash=${queryHash}`;
 
     const graphqlVariables = {
-      id: userId,
       first: 50,
+      ...graphqlVariablesIn,
     };
 
     const outUsers = [];
@@ -379,15 +375,14 @@ const Instauto = async (db, browser, options) => {
     };
 
     while (shouldProceed()) {
-      const url = `${getFollowers ? followersUrl : followingUrl}&variables=${JSON.stringify(graphqlVariables)}`;
+      const url = `${graphqlUrl}&variables=${JSON.stringify(graphqlVariables)}`;
       // logger.log(url);
       await page.goto(url);
       const json = await getPageJson();
 
-      const subPropName = getFollowers ? 'edge_followed_by' : 'edge_follow';
-
-      const pageInfo = json.data.user[subPropName].page_info;
-      const { edges } = json.data.user[subPropName];
+      const subProp = getResponseProp(json);
+      const pageInfo = subProp.page_info;
+      const { edges } = subProp;
 
       edges.forEach(e => outUsers.push(e.node.username));
 
@@ -404,54 +399,31 @@ const Instauto = async (db, browser, options) => {
     return outUsers;
   }
 
-  async function getUsersLikedContent({
-    contentId, maxPages, shouldProceed: shouldProceedArg,
+  async function getFollowersOrFollowing({
+    userId, getFollowers = false, maxPages, shouldProceed,
   }) {
-    const graphqlUrl = `${instagramBaseUrl}/graphql/query`;
-    const contentUrl = `${graphqlUrl}/?query_hash=d5d763b1e2acf209d62d22d184488e57`;
+    return graphqlQueryUser({
+      getResponseProp: (json) => json.data.user[getFollowers ? 'edge_followed_by' : 'edge_follow'],
+      graphqlVariables: { id: userId },
+      shouldProceed,
+      maxPages,
+      queryHash: getFollowers ? '37479f2b8209594dde7facb0d904896a' : '58712303d941c6855d4e888c5f0cd22f',
+    });
+  }
 
-    const graphqlVariables = {
-      shortcode: contentId,
-      include_reel: true,
-      first: 50,
-    };
-
-    const outUsers = [];
-
-    let hasNextPage = true;
-    let i = 0;
-
-    const shouldProceed = () => {
-      if (!hasNextPage) return false;
-      const isBelowMaxPages = maxPages == null || i < maxPages;
-      if (shouldProceedArg) return isBelowMaxPages && shouldProceedArg(outUsers);
-      return isBelowMaxPages;
-    };
-
-    while (shouldProceed()) {
-      const url = `${contentUrl}&variables=${JSON.stringify(graphqlVariables)}`;
-      // logger.log(url);
-      await page.goto(url);
-      const json = await getPageJson();
-
-      const subPropName = 'edge_liked_by';
-
-      const pageInfo = json.data.shortcode_media[subPropName].page_info;
-      const { edges } = json.data.shortcode_media[subPropName];
-
-      edges.forEach(e => outUsers.push(e.node.username));
-
-      graphqlVariables.after = pageInfo.end_cursor;
-      hasNextPage = pageInfo.has_next_page;
-      i += 1;
-
-      if (shouldProceed()) {
-        logger.log(`Has more pages (current ${i})`);
-        // await sleep(300);
-      }
-    }
-
-    return outUsers;
+  async function getUsersLikedContent({
+    contentId, maxPages, shouldProceed,
+  }) {
+    return graphqlQueryUser({
+      getResponseProp: (json) => json.data.shortcode_media.edge_liked_by,
+      graphqlVariables: {
+        shortcode: contentId,
+        include_reel: true,
+      },
+      shouldProceed,
+      maxPages,
+      queryHash: 'd5d763b1e2acf209d62d22d184488e57',
+    });
   }
 
   /* eslint-disable no-undef */
