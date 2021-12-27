@@ -354,7 +354,7 @@ const Instauto = async (db, browser, options) => {
 
   const isLoggedIn = async () => (await page.$x('//*[@aria-label="Home"]')).length === 1;
 
-  async function graphqlQueryUser({ queryHash, getResponseProp, maxPages, shouldProceed: shouldProceedArg, graphqlVariables: graphqlVariablesIn }) {
+  async function graphqlQueryUsers({ queryHash, getResponseProp, maxPages, shouldProceed: shouldProceedArg, graphqlVariables: graphqlVariablesIn }) {
     const graphqlUrl = `${instagramBaseUrl}/graphql/query/?query_hash=${queryHash}`;
 
     const graphqlVariables = {
@@ -402,7 +402,7 @@ const Instauto = async (db, browser, options) => {
   async function getFollowersOrFollowing({
     userId, getFollowers = false, maxPages, shouldProceed,
   }) {
-    return graphqlQueryUser({
+    return graphqlQueryUsers({
       getResponseProp: (json) => json.data.user[getFollowers ? 'edge_followed_by' : 'edge_follow'],
       graphqlVariables: { id: userId },
       shouldProceed,
@@ -414,7 +414,7 @@ const Instauto = async (db, browser, options) => {
   async function getUsersWhoLikedContent({
     contentId, maxPages, shouldProceed,
   }) {
-    return graphqlQueryUser({
+    return graphqlQueryUsers({
       getResponseProp: (json) => json.data.shortcode_media.edge_liked_by,
       graphqlVariables: {
         shortcode: contentId,
