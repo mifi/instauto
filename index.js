@@ -404,6 +404,56 @@ const Instauto = async (db, browser, options) => {
     return outUsers;
   }
 
+  async function getUsersLikedContent({
+    contentId, maxPages, shouldProceed: shouldProceedArg,
+  }) {
+    const graphqlUrl = `${instagramBaseUrl}/graphql/query`;
+    const contentUrl = `${graphqlUrl}/?query_hash=d5d763b1e2acf209d62d22d184488e57`;
+
+    const graphqlVariables = {
+      shortcode: contentId,
+      include_reel: true,
+      first: 50,
+    };
+
+    const outUsers = [];
+
+    let hasNextPage = true;
+    let i = 0;
+
+    const shouldProceed = () => {
+      if (!hasNextPage) return false;
+      const isBelowMaxPages = maxPages == null || i < maxPages;
+      if (shouldProceedArg) return isBelowMaxPages && shouldProceedArg(outUsers);
+      return isBelowMaxPages;
+    };
+
+    while (shouldProceed()) {
+      const url = `${contentUrl}&variables=${JSON.stringify(graphqlVariables)}`;
+      // logger.log(url);
+      await page.goto(url);
+      const json = await getPageJson();
+
+      const subPropName = 'edge_liked_by';
+
+      const pageInfo = json.data.shortcode_media[subPropName].page_info;
+      const { edges } = json.data.shortcode_media[subPropName];
+
+      edges.forEach(e => outUsers.push(e.node.username));
+
+      graphqlVariables.after = pageInfo.end_cursor;
+      hasNextPage = pageInfo.has_next_page;
+      i += 1;
+
+      if (shouldProceed()) {
+        logger.log(`Has more pages (current ${i})`);
+        // await sleep(300);
+      }
+    }
+
+    return outUsers;
+  }
+
   /* eslint-disable no-undef */
   async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax }) {
     const allImages = Array.from(document.getElementsByTagName('a')).filter(el => /instagram.com\/p\//.test(el.href));
@@ -901,6 +951,7 @@ const Instauto = async (db, browser, options) => {
     sleep,
     listManuallyFollowedUsers,
     getFollowersOrFollowing,
+    getUsersLikedContent,
     safelyUnfollowUserList,
     getPage,
     followUsersFollowers,
