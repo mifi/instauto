@@ -411,7 +411,7 @@ const Instauto = async (db, browser, options) => {
     });
   }
 
-  async function getUsersLikedContent({
+  async function getUsersWhoLikedContent({
     contentId, maxPages, shouldProceed,
   }) {
     return graphqlQueryUser({
@@ -923,7 +923,7 @@ const Instauto = async (db, browser, options) => {
     sleep,
     listManuallyFollowedUsers,
     getFollowersOrFollowing,
-    getUsersLikedContent,
+    getUsersWhoLikedContent,
     safelyUnfollowUserList,
     getPage,
     followUsersFollowers,
