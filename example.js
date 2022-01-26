@@ -31,6 +31,9 @@ const options = {
   // Don't follow users who have more people following them than this:
   followUserMinFollowing: null,
 
+  // Filter user to follow if their username has a match for at least a string:
+  followUserWithUsernameMatching: null,
+
   // NOTE: The dontUnfollowUntilTimeElapsed option is ONLY for the unfollowNonMutualFollowers function
   // This specifies the time during which the bot should not touch users that it has previously followed (in milliseconds)
   // After this time has passed, it will be able to unfollow them again.

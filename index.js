@@ -2,6 +2,7 @@
 
 const assert = require('assert');
 const fs = require('fs-extra');
+const { flatMap } = require('lodash');
 const { join } = require('path');
 const UserAgent = require('user-agents');
 const JSONDB = require('./db');
@@ -44,6 +45,8 @@ const Instauto = async (db, browser, options) => {
     followUserMaxFollowing = null,
     followUserMinFollowers = null,
     followUserMinFollowing = null,
+
+    followUserWithUsernameMatching = null,
 
     dontUnfollowUntilTimeElapsed = 3 * 24 * 60 * 60 * 1000,
 
@@ -584,6 +587,8 @@ const Instauto = async (db, browser, options) => {
           (followUserRatioMin != null && ratio < followUserRatioMin)
         ) {
           logger.log('User has too many followers compared to follows or opposite, skipping');
+        } else if (followUserWithUsernameMatching != null && followUserWithUsernameMatching.find(v => str.includes(v)) === undefined) { 
+          logger.log('User username doesn\'t contain any of the pattern provided, skipping');
         } else {
           await followCurrentUser(follower);
           numFollowedForThisUser += 1;
