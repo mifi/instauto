@@ -2,7 +2,6 @@
 
 const assert = require('assert');
 const fs = require('fs-extra');
-const { flatMap } = require('lodash');
 const { join } = require('path');
 const UserAgent = require('user-agents');
 const JSONDB = require('./db');
