@@ -242,12 +242,31 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
-  async function findFollowButton() {
-    const elementHandles = await page.$x("//header//button[text()='Follow']");
+  // How to test xpaths in the browser:
+  // document.evaluate("your xpath", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null ).singleNodeValue
+  async function findButtonWithText(text) {
+    // todo escape text?
+
+    // button seems to look like this now:
+    // <button class="..."><div class="...">Follow</div></button>
+    // https://sqa.stackexchange.com/questions/36918/xpath-text-buy-now-is-working-but-not-containstext-buy-now
+    // https://github.com/mifi/SimpleInstaBot/issues/106
+    let elementHandles = await page.$x(`//header//button[contains(.,'${text}')]`);
     if (elementHandles.length > 0) return elementHandles[0];
 
-    const elementHandles2 = await page.$x("//header//button[text()='Follow Back']");
-    if (elementHandles2.length > 0) return elementHandles2[0];
+    // old button:
+    elementHandles = await page.$x(`//header//button[text()='${text}']`);
+    if (elementHandles.length > 0) return elementHandles[0];
+
+    return undefined;
+  }
+
+  async function findFollowButton() {
+    let button = await findButtonWithText('Follow');
+    if (button) return button;
+
+    button = await findButtonWithText('Follow Back');
+    if (button) return button;
 
     return undefined;
   }
