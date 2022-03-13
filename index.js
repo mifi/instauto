@@ -799,7 +799,7 @@ const Instauto = async (db, browser, options) => {
 
   if (enableCookies) await tryLoadCookies();
 
-  const goHome = async () => page.goto(`${instagramBaseUrl}/`);
+  const goHome = async () => page.goto(`${instagramBaseUrl}/?hl=en`);
 
   // https://github.com/mifi/SimpleInstaBot/issues/28
   async function setLang(short, long) {
