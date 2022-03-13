@@ -829,15 +829,22 @@ const Instauto = async (db, browser, options) => {
       logger.log('Found language selector');
 
       // https://stackoverflow.com/questions/45864516/how-to-select-an-option-from-dropdown-select
-      await page.evaluate((selectElem, short2) => {
+      const alreadyEnglish = await page.evaluate((selectElem, short2) => {
         const optionElem = selectElem.querySelector(`option[value='${short2}']`);
+        if (optionElem.selected) return true; // already selected?
         optionElem.selected = true;
         // eslint-disable-next-line no-undef
         const event = new Event('change', { bubbles: true });
         selectElem.dispatchEvent(event);
+        return false;
       }, elementHandles[0], short);
-      logger.log('Selected language');
 
+      if (alreadyEnglish) {
+        logger.log('Already English language');
+        return;
+      }
+
+      logger.log('Selected language');
       await sleep(3000);
       await goHome();
       await sleep(1000);
@@ -850,12 +857,12 @@ const Instauto = async (db, browser, options) => {
   const setEnglishLang = async () => setLang('en', 'English');
   // const setEnglishLang = async () => setLang('de', 'Deutsch');
 
-  async function tryPressButton(elementHandles, name) {
+  async function tryPressButton(elementHandles, name, sleepMs = 3000) {
     try {
       if (elementHandles.length === 1) {
         logger.log(`Pressing button: ${name}`);
         elementHandles[0].click();
-        await sleep(3000);
+        await sleep(sleepMs);
       }
     } catch (err) {
       logger.warn(`Failed to press button: ${name}`);
@@ -865,6 +872,8 @@ const Instauto = async (db, browser, options) => {
   await setEnglishLang();
 
   await tryPressButton(await page.$x('//button[contains(text(), "Accept")]'), 'Accept cookies dialog');
+  await tryPressButton(await page.$x('//button[contains(text(), "Only allow essential cookies")]'), 'Accept cookies dialog 2 button 1', 10000);
+  await tryPressButton(await page.$x('//button[contains(text(), "Allow essential and optional cookies")]'), 'Accept cookies dialog 2 button 2', 10000);
 
   if (!(await isLoggedIn())) {
     if (!myUsername || !password) {
@@ -876,7 +885,7 @@ const Instauto = async (db, browser, options) => {
       await page.click('a[href="/accounts/login/?source=auth_switcher"]');
       await sleep(1000);
     } catch (err) {
-      logger.warn('Login page button not found, assuming we have login form');
+      logger.info('No login page button, assuming we are on login form');
     }
 
     // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
@@ -887,8 +896,15 @@ const Instauto = async (db, browser, options) => {
     await page.type('input[name="password"]', password, { delay: 50 });
     await sleep(1000);
 
-    const loginButton = (await page.$x("//button[.//text() = 'Log In']"))[0];
-    await loginButton.click();
+    for (;;) {
+      const loginButton = (await page.$x("//button[.//text() = 'Log In']"))[0];
+      if (loginButton) {
+        await loginButton.click();
+        break;
+      }
+      logger.warn('Login button not found. Maybe you can help me click it? And also report an issue on github with a screenshot of what you\'re seeing :)');
+      await sleep(6000);
+    }
 
     await sleep(6000);
 
