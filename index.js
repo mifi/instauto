@@ -165,27 +165,45 @@ const Instauto = async (db, browser, options) => {
     return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
   }
 
-  async function safeGotoUser(url) {
-    logger.log(`Goto ${url}`);
-    const response = await page.goto(url);
-    await sleep(1000);
-    const status = response.status();
+  async function gotoWithRetry(url) {
+    for (let attempt = 0; ; attempt += 1) {
+      logger.log(`Goto ${url}`);
+      const response = await page.goto(url);
+      await sleep(1000);
+      const status = response.status();
+
+      // https://www.reddit.com/r/Instagram/comments/kwrt0s/error_560/
+      // https://github.com/mifi/instauto/issues/60
+      if (![560, 429].includes(status) || attempt > 3) return status;
+
+      logger.info(`Got ${status} - Retrying request later...`);
+      if (status === 429) logger.warn('429 Too Many Requests could mean that Instagram suspects you\'re using a bot. You could try to use the Instagram Mobile app from the same IP for a few days first');
+      await sleep((attempt + 1) * 30 * 60 * 1000);
+    }
+  }
+
+  async function safeGotoUser(url, checkPageForUsername) {
+    const status = await gotoWithRetry(url);
     if (status === 200) {
+      if (checkPageForUsername != null) {
+        // some pages return 200 but nothing there (I think deleted accounts)
+        // https://github.com/mifi/SimpleInstaBot/issues/48
+        // example: https://www.instagram.com/victorialarson__/
+        // so we check if the page has the user's name on it
+        return page.evaluate((username) => window.find(username), checkPageForUsername);
+      }
       return true;
-    } else if (status === 404) {
+    }
+    if (status === 404) {
       logger.log('User not found');
       return false;
-    } else if (status === 429) {
-      logger.error('Got 429 Too Many Requests, waiting...');
-      await sleep(60 * 60 * 1000);
-      throw new Error('Aborted operation due to too many requests'); // TODO retry instead
     }
-    throw new Error(`Navigate to user returned status ${response.status()}`);
+    throw new Error(`Navigate to user failed with status ${status}`);
   }
 
   async function navigateToUser(username) {
     logger.log(`Navigating to user ${username}`);
-    return safeGotoUser(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
+    return safeGotoUser(`${instagramBaseUrl}/${encodeURIComponent(username)}`, username);
   }
 
   async function getPageJson() {
@@ -320,7 +338,7 @@ const Instauto = async (db, browser, options) => {
       await addPrevFollowedUser(entry);
 
       if (!elementHandle2) {
-        logger.log('Button did not change state - Sleeping');
+        logger.log('Button did not change state - Sleeping 1 min');
         await sleep(60000);
         throw new Error('Button did not change state');
       }
