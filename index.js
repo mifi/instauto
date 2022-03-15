@@ -165,7 +165,7 @@ const Instauto = async (db, browser, options) => {
     return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
   }
 
-  async function safeGoto(url) {
+  async function safeGotoUser(url) {
     logger.log(`Goto ${url}`);
     const response = await page.goto(url);
     await sleep(1000);
@@ -185,7 +185,7 @@ const Instauto = async (db, browser, options) => {
 
   async function navigateToUser(username) {
     logger.log(`Navigating to user ${username}`);
-    return safeGoto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
+    return safeGotoUser(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
   }
 
   async function getPageJson() {
@@ -197,7 +197,7 @@ const Instauto = async (db, browser, options) => {
     if (graphqlUserMissing) {
       // https://stackoverflow.com/questions/37593025/instagram-api-get-the-userid
       // https://stackoverflow.com/questions/17373886/how-can-i-get-a-users-media-from-instagram-without-authenticating-as-a-user
-      const found = await safeGoto(`${instagramBaseUrl}/${encodeURIComponent(username)}?__a=1`);
+      const found = await safeGotoUser(`${instagramBaseUrl}/${encodeURIComponent(username)}?__a=1`);
       if (!found) throw new Error('User not found');
 
       const json = await getPageJson();
@@ -791,6 +791,10 @@ const Instauto = async (db, browser, options) => {
   }
 
   page = await browser.newPage();
+
+  // https://github.com/mifi/SimpleInstaBot/issues/118#issuecomment-1067883091
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'en' });
+
   if (randomizeUserAgent) {
     const userAgentGenerated = new UserAgent({ deviceCategory: 'desktop' });
     await page.setUserAgent(userAgentGenerated.toString());
@@ -802,27 +806,19 @@ const Instauto = async (db, browser, options) => {
   const goHome = async () => page.goto(`${instagramBaseUrl}/?hl=en`);
 
   // https://github.com/mifi/SimpleInstaBot/issues/28
-  async function setLang(short, long) {
+  async function setLang(short, long, assumeLoggedIn = false) {
     logger.log(`Setting language to ${long} (${short})`);
-
-    // This doesn't seem to always work, hence why it's just a fallback now
-    async function fallbackSetLang() {
-      await goHome();
-      await sleep(1000);
-
-      await page.setCookie({
-        name: 'ig_lang',
-        value: short,
-        path: '/',
-      });
-      await sleep(1000);
-      await goHome();
-      await sleep(3000);
-    }
 
     try {
       await sleep(1000);
-      await goHome();
+
+      // when logged in, we need to go to account in order to be able to check/set language
+      // (need to see the footer)
+      if (assumeLoggedIn) {
+        await page.goto(`${instagramBaseUrl}/accounts/edit/`);
+      } else {
+        await goHome();
+      }
       await sleep(3000);
       const elementHandles = await page.$x(`//select[//option[@value='${short}' and text()='${long}']]`);
       if (elementHandles.length < 1) throw new Error('Language selector not found');
@@ -841,6 +837,10 @@ const Instauto = async (db, browser, options) => {
 
       if (alreadyEnglish) {
         logger.log('Already English language');
+        if (!assumeLoggedIn) {
+          await goHome(); // because we were on the settings page
+          await sleep(1000);
+        }
         return;
       }
 
@@ -850,12 +850,23 @@ const Instauto = async (db, browser, options) => {
       await sleep(1000);
     } catch (err) {
       logger.error('Failed to set language, trying fallback (cookie)', err);
-      await fallbackSetLang();
+      // This doesn't seem to always work, hence why it's just a fallback now
+      await goHome();
+      await sleep(1000);
+
+      await page.setCookie({
+        name: 'ig_lang',
+        value: short,
+        path: '/',
+      });
+      await sleep(1000);
+      await goHome();
+      await sleep(3000);
     }
   }
 
-  const setEnglishLang = async () => setLang('en', 'English');
-  // const setEnglishLang = async () => setLang('de', 'Deutsch');
+  const setEnglishLang = async (assumeLoggedIn) => setLang('en', 'English', assumeLoggedIn);
+  // const setEnglishLang = async (assumeLoggedIn) => setLang('de', 'Deutsch', assumeLoggedIn);
 
   async function tryPressButton(elementHandles, name, sleepMs = 3000) {
     try {
@@ -869,7 +880,7 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
-  await setEnglishLang();
+  await setEnglishLang(false);
 
   await tryPressButton(await page.$x('//button[contains(text(), "Accept")]'), 'Accept cookies dialog');
   await tryPressButton(await page.$x('//button[contains(text(), "Only allow essential cookies")]'), 'Accept cookies dialog 2 button 1', 10000);
@@ -924,7 +935,8 @@ const Instauto = async (db, browser, options) => {
     }
 
     // In case language gets reset after logging in
-    await setEnglishLang();
+    // https://github.com/mifi/SimpleInstaBot/issues/118
+    await setEnglishLang(true);
 
     // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
     await tryPressButton(await page.$x('//button[contains(text(), "Save Info")]'), 'Login info dialog: Save Info');
