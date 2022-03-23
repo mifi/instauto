@@ -924,7 +924,8 @@ const Instauto = async (db, browser, options) => {
 
       const { users } = JSON.parse(await foundResponse.text());
       if (users.length < 2) throw new Error('Unable to find user follows list');
-      return users.some((user) => user.pk === myUserId); // If they follow us, we will show at the top of the list
+      // console.log(users, myUserId);
+      return users.some((user) => String(user.pk) === String(myUserId) || user.username === myUsername); // If they follow us, we will show at the top of the list
     } catch (err) {
       logger.error('Failed to check if user follows us', err);
       return undefined;
@@ -1019,6 +1020,7 @@ const Instauto = async (db, browser, options) => {
     safelyUnfollowUserList,
     getPage,
     followUsersFollowers,
+    doesUserFollowMe,
   };
 };
 
