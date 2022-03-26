@@ -210,6 +210,10 @@ const Instauto = async (db, browser, options) => {
     return safeGotoUser(url, username);
   }
 
+  async function navigateToUserWithCheck(username) {
+    if (!(await navigateToUser(username))) throw new Error('User not found');
+  }
+
   async function getPageJson() {
     return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
   }
@@ -226,11 +230,11 @@ const Instauto = async (db, browser, options) => {
 
       const { user } = json.graphql;
 
-      await navigateToUser(username);
+      await navigateToUserWithCheck(username);
       return user;
     }
 
-    await navigateToUser(username);
+    await navigateToUserWithCheck(username);
 
     // eslint-disable-next-line no-underscore-dangle
     const sharedData = await page.evaluate(() => window._sharedData);
@@ -311,8 +315,8 @@ const Instauto = async (db, browser, options) => {
     return elementHandles[0];
   }
 
-  // NOTE: assumes we are on this page
-  async function followCurrentUser(username) {
+  async function followUser(username) {
+    await navigateToUserWithCheck(username);
     const elementHandle = await findFollowButton();
 
     if (!elementHandle) {
@@ -353,7 +357,8 @@ const Instauto = async (db, browser, options) => {
 
   // See https://github.com/timgrossmann/InstaPy/pull/2345
   // https://github.com/timgrossmann/InstaPy/issues/2355
-  async function unfollowCurrentUser(username) {
+  async function unfollowUser(username) {
+    await navigateToUserWithCheck(username);
     logger.log(`Unfollowing user ${username}`);
 
     const res = { username, time: new Date().getTime() };
@@ -549,8 +554,10 @@ const Instauto = async (db, browser, options) => {
   /* eslint-enable no-undef */
 
 
-  async function likeCurrentUserImages({ username, likeImagesMin, likeImagesMax } = {}) {
+  async function likeUserImages({ username, likeImagesMin, likeImagesMax } = {}) {
     if (!likeImagesMin || !likeImagesMax || likeImagesMax < likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
+
+    await navigateToUserWithCheck(username);
 
     logger.log(`Liking ${likeImagesMin}-${likeImagesMax} user images`);
     try {
@@ -613,14 +620,14 @@ const Instauto = async (db, browser, options) => {
             ) {
               logger.log('User has too many followers compared to follows or opposite, skipping');
             } else {
-              await followCurrentUser(follower);
+              await followUser(follower);
               numFollowedForThisUser += 1;
 
               await sleep(10000);
 
               if (!isPrivate && enableLikeImages && !hasReachedDailyLikesLimit()) {
                 try {
-                  await likeCurrentUserImages({ username: follower, likeImagesMin, likeImagesMax });
+                  await likeUserImages({ username: follower, likeImagesMin, likeImagesMax });
                 } catch (err) {
                   logger.error(`Failed to follow user's images ${follower}`, err);
                   await takeScreenshot();
@@ -684,7 +691,7 @@ const Instauto = async (db, browser, options) => {
               await addPrevUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
               await sleep(3000);
             } else {
-              const { noActionTaken } = await unfollowCurrentUser(username);
+              const { noActionTaken } = await unfollowUser(username);
 
               if (noActionTaken) {
                 await sleep(3000);
@@ -901,14 +908,11 @@ const Instauto = async (db, browser, options) => {
 
   // --- END OF INITIALIZATION
 
-
   async function doesUserFollowMe(username) {
     try {
       logger.info('Checking if user', username, 'follows us');
       const userData = await navigateToUserAndGetData(username);
       const userId = userData.id;
-
-      if (!(await navigateToUser(username))) throw new Error('User not found');
 
       const elementHandles = await page.$x("//a[contains(.,' following')][contains(@href,'/following')]");
       if (elementHandles.length === 0) throw new Error('Following button not found');
@@ -1011,8 +1015,9 @@ const Instauto = async (db, browser, options) => {
     unfollowNonMutualFollowers,
     unfollowAllUnknown,
     unfollowOldFollowed,
-    followCurrentUser,
-    unfollowCurrentUser,
+    followUser,
+    unfollowUser,
+    likeUserImages,
     sleep,
     listManuallyFollowedUsers,
     getFollowersOrFollowing,
