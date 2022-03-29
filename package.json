@@ -1,6 +1,6 @@
 {
   "name": "instauto",
-  "version": "9.0.0",
+  "version": "7.2.2",
   "description": "Instagram automation library written in Node.js",
   "main": "index.js",
   "scripts": {
@@ -19,10 +19,9 @@
     "user-agents": "^1.0.559"
   },
   "devDependencies": {
-    "eslint": "^7.32.0 || ^8.2.0",
+    "eslint": "^4.19.1",
     "eslint-config-airbnb": "^16.1.0",
-    "eslint-config-airbnb-base": "^15.0.0",
-    "eslint-plugin-import": "^2.25.2",
+    "eslint-plugin-import": "^2.9.0",
     "puppeteer": "^1.19.0"
   }
 }

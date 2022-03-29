@@ -117,9 +117,8 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
-  const sleep = (ms, deviation = 1) => {
-    let msWithDev = ((Math.random() * deviation) + 1) * ms;
-    if (dryRun) msWithDev = Math.min(3000, msWithDev); // for dryRun, no need to wait so long
+  const sleep = (ms, dev = 1) => {
+    const msWithDev = ((Math.random() * dev) + 1) * ms;
     logger.log('Waiting', Math.round(msWithDev / 1000), 'sec');
     return new Promise(resolve => setTimeout(resolve, msWithDev));
   };
@@ -166,52 +165,27 @@ const Instauto = async (db, browser, options) => {
     return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
   }
 
-  async function gotoWithRetry(url) {
-    for (let attempt = 0; ; attempt += 1) {
-      logger.log(`Goto ${url}`);
-      const response = await page.goto(url);
-      await sleep(1000);
-      const status = response.status();
-
-      // https://www.reddit.com/r/Instagram/comments/kwrt0s/error_560/
-      // https://github.com/mifi/instauto/issues/60
-      if (![560, 429].includes(status) || attempt > 3) return status;
-
-      logger.info(`Got ${status} - Retrying request later...`);
-      if (status === 429) logger.warn('429 Too Many Requests could mean that Instagram suspects you\'re using a bot. You could try to use the Instagram Mobile app from the same IP for a few days first');
-      await sleep((attempt + 1) * 30 * 60 * 1000);
-    }
-  }
-
-  async function safeGotoUser(url, checkPageForUsername) {
-    const status = await gotoWithRetry(url);
+  async function safeGoto(url) {
+    logger.log(`Goto ${url}`);
+    const response = await page.goto(url);
+    await sleep(1000);
+    const status = response.status();
     if (status === 200) {
-      if (checkPageForUsername != null) {
-        // some pages return 200 but nothing there (I think deleted accounts)
-        // https://github.com/mifi/SimpleInstaBot/issues/48
-        // example: https://www.instagram.com/victorialarson__/
-        // so we check if the page has the user's name on it
-        return page.evaluate((username) => window.find(username), checkPageForUsername);
-      }
       return true;
-    }
-    if (status === 404) {
+    } else if (status === 404) {
       logger.log('User not found');
       return false;
+    } else if (status === 429) {
+      logger.error('Got 429 Too Many Requests, waiting...');
+      await sleep(60 * 60 * 1000);
+      throw new Error('Aborted operation due to too many requests'); // TODO retry instead
     }
-    throw new Error(`Navigate to user failed with status ${status}`);
+    throw new Error(`Navigate to user returned status ${response.status()}`);
   }
 
   async function navigateToUser(username) {
-    const url = `${instagramBaseUrl}/${encodeURIComponent(username)}`;
-    if (page.url().replace(/\/$/, '') === url.replace(/\/$/, '')) return true; // optimization: already on URL? (ignore trailing slash)
-    // logger.log('navigating from', page.url(), 'to', url);
     logger.log(`Navigating to user ${username}`);
-    return safeGotoUser(url, username);
-  }
-
-  async function navigateToUserWithCheck(username) {
-    if (!(await navigateToUser(username))) throw new Error('User not found');
+    return safeGoto(`${instagramBaseUrl}/${encodeURIComponent(username)}`);
   }
 
   async function getPageJson() {
@@ -223,18 +197,18 @@ const Instauto = async (db, browser, options) => {
     if (graphqlUserMissing) {
       // https://stackoverflow.com/questions/37593025/instagram-api-get-the-userid
       // https://stackoverflow.com/questions/17373886/how-can-i-get-a-users-media-from-instagram-without-authenticating-as-a-user
-      const found = await safeGotoUser(`${instagramBaseUrl}/${encodeURIComponent(username)}?__a=1`);
+      const found = await safeGoto(`${instagramBaseUrl}/${encodeURIComponent(username)}?__a=1`);
       if (!found) throw new Error('User not found');
 
       const json = await getPageJson();
 
       const { user } = json.graphql;
 
-      await navigateToUserWithCheck(username);
+      await navigateToUser(username);
       return user;
     }
 
-    await navigateToUserWithCheck(username);
+    await navigateToUser(username);
 
     // eslint-disable-next-line no-underscore-dangle
     const sharedData = await page.evaluate(() => window._sharedData);
@@ -315,8 +289,8 @@ const Instauto = async (db, browser, options) => {
     return elementHandles[0];
   }
 
-  async function followUser(username) {
-    await navigateToUserWithCheck(username);
+  // NOTE: assumes we are on this page
+  async function followCurrentUser(username) {
     const elementHandle = await findFollowButton();
 
     if (!elementHandle) {
@@ -346,7 +320,7 @@ const Instauto = async (db, browser, options) => {
       await addPrevFollowedUser(entry);
 
       if (!elementHandle2) {
-        logger.log('Button did not change state - Sleeping 1 min');
+        logger.log('Button did not change state - Sleeping');
         await sleep(60000);
         throw new Error('Button did not change state');
       }
@@ -357,8 +331,7 @@ const Instauto = async (db, browser, options) => {
 
   // See https://github.com/timgrossmann/InstaPy/pull/2345
   // https://github.com/timgrossmann/InstaPy/issues/2355
-  async function unfollowUser(username) {
-    await navigateToUserWithCheck(username);
+  async function unfollowCurrentUser(username) {
     logger.log(`Unfollowing user ${username}`);
 
     const res = { username, time: new Date().getTime() };
@@ -400,7 +373,7 @@ const Instauto = async (db, browser, options) => {
 
   const isLoggedIn = async () => (await page.$x('//*[@aria-label="Home"]')).length === 1;
 
-  async function* graphqlQueryUsers({ queryHash, getResponseProp, graphqlVariables: graphqlVariablesIn }) {
+  async function graphqlQueryUsers({ queryHash, getResponseProp, maxPages, shouldProceed: shouldProceedArg, graphqlVariables: graphqlVariablesIn }) {
     const graphqlUrl = `${instagramBaseUrl}/graphql/query/?query_hash=${queryHash}`;
 
     const graphqlVariables = {
@@ -413,7 +386,14 @@ const Instauto = async (db, browser, options) => {
     let hasNextPage = true;
     let i = 0;
 
-    while (hasNextPage) {
+    const shouldProceed = () => {
+      if (!hasNextPage) return false;
+      const isBelowMaxPages = maxPages == null || i < maxPages;
+      if (shouldProceedArg) return isBelowMaxPages && shouldProceedArg(outUsers);
+      return isBelowMaxPages;
+    };
+
+    while (shouldProceed()) {
       const url = `${graphqlUrl}&variables=${JSON.stringify(graphqlVariables)}`;
       // logger.log(url);
       await page.goto(url);
@@ -423,47 +403,44 @@ const Instauto = async (db, browser, options) => {
       const pageInfo = subProp.page_info;
       const { edges } = subProp;
 
-      const ret = [];
-      edges.forEach(e => ret.push(e.node.username));
+      edges.forEach(e => outUsers.push(e.node.username));
 
       graphqlVariables.after = pageInfo.end_cursor;
       hasNextPage = pageInfo.has_next_page;
       i += 1;
 
-      if (hasNextPage) {
+      if (shouldProceed()) {
         logger.log(`Has more pages (current ${i})`);
         // await sleep(300);
       }
-
-      yield ret;
     }
 
     return outUsers;
   }
 
-  function getFollowersOrFollowingGenerator({ userId, getFollowers = false }) {
+  async function getFollowersOrFollowing({
+    userId, getFollowers = false, maxPages, shouldProceed,
+  }) {
     return graphqlQueryUsers({
       getResponseProp: (json) => json.data.user[getFollowers ? 'edge_followed_by' : 'edge_follow'],
       graphqlVariables: { id: userId },
+      shouldProceed,
+      maxPages,
       queryHash: getFollowers ? '37479f2b8209594dde7facb0d904896a' : '58712303d941c6855d4e888c5f0cd22f',
     });
   }
 
-  async function getFollowersOrFollowing({ userId, getFollowers = false }) {
-    let users = [];
-    for await (const usersBatch of getFollowersOrFollowingGenerator({ userId, getFollowers })) {
-      users = [...users, ...usersBatch];
-    }
-    return users;
-  }
-
-  function getUsersWhoLikedContent({ contentId }) {
+  async function getUsersWhoLikedContent({
+    contentId, maxPages, shouldProceed,
+  }) {
     return graphqlQueryUsers({
       getResponseProp: (json) => json.data.shortcode_media.edge_liked_by,
       graphqlVariables: {
         shortcode: contentId,
         include_reel: true,
       },
+      shouldProceed,
+      maxPages,
       queryHash: 'd5d763b1e2acf209d62d22d184488e57',
     });
   }
@@ -554,10 +531,8 @@ const Instauto = async (db, browser, options) => {
   /* eslint-enable no-undef */
 
 
-  async function likeUserImages({ username, likeImagesMin, likeImagesMax } = {}) {
+  async function likeCurrentUserImages({ username, likeImagesMin, likeImagesMax } = {}) {
     if (!likeImagesMin || !likeImagesMax || likeImagesMax < likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
-
-    await navigateToUserWithCheck(username);
 
     logger.log(`Liking ${likeImagesMin}-${likeImagesMax} user images`);
     try {
@@ -582,66 +557,73 @@ const Instauto = async (db, browser, options) => {
 
     const userData = await navigateToUserAndGetData(username);
 
-    for await (const followersBatch of getFollowersOrFollowingGenerator({ userId: userData.id, getFollowers: true })) {
-      logger.log('User followers batch', followersBatch);
+    // Check if we have more than enough users that are not previously followed
+    const shouldProceed = usersSoFar => (
+      usersSoFar.filter(u => !getPrevFollowedUser(u)).length < maxFollowsPerUser + 5 // 5 is just a margin
+    );
+    let followers = await getFollowersOrFollowing({
+      userId: userData.id,
+      getFollowers: true,
+      shouldProceed,
+    });
 
-      for (const follower of followersBatch) {
-        if (getPrevFollowedUser(follower)) {
-          logger.log('Skipping already followed user', follower);
-        } else {
-          try {
-            if (numFollowedForThisUser >= maxFollowsPerUser) {
-              logger.log('Have reached followed limit for this user, stopping');
-              return;
-            }
+    logger.log('Followers', followers);
 
-            const graphqlUser = await navigateToUserAndGetData(follower);
+    // Filter again
+    followers = followers.filter(f => !getPrevFollowedUser(f));
 
-            const followedByCount = graphqlUser.edge_followed_by.count;
-            const followsCount = graphqlUser.edge_follow.count;
-            const isPrivate = graphqlUser.is_private;
-
-            // logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
-
-            const ratio = followedByCount / (followsCount || 1);
-
-            if (isPrivate && skipPrivate) {
-              logger.log('User is private, skipping');
-            } else if (
-              (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers) ||
-              (followUserMaxFollowing != null && followsCount > followUserMaxFollowing) ||
-              (followUserMinFollowers != null && followedByCount < followUserMinFollowers) ||
-              (followUserMinFollowing != null && followsCount < followUserMinFollowing)
-            ) {
-              logger.log('User has too many or too few followers or following, skipping.', 'followedByCount:', followedByCount, 'followsCount:', followsCount);
-            } else if (
-              (followUserRatioMax != null && ratio > followUserRatioMax) ||
-              (followUserRatioMin != null && ratio < followUserRatioMin)
-            ) {
-              logger.log('User has too many followers compared to follows or opposite, skipping');
-            } else {
-              await followUser(follower);
-              numFollowedForThisUser += 1;
-
-              await sleep(10000);
-
-              if (!isPrivate && enableLikeImages && !hasReachedDailyLikesLimit()) {
-                try {
-                  await likeUserImages({ username: follower, likeImagesMin, likeImagesMax });
-                } catch (err) {
-                  logger.error(`Failed to follow user's images ${follower}`, err);
-                  await takeScreenshot();
-                }
-              }
-
-              await sleep(20000);
-              await throttle();
-            }
-          } catch (err) {
-            logger.error(`Failed to process follower ${follower}`, err);
-            await sleep(20000);
-          }
+    for (const follower of followers) {
+      try {
+        if (numFollowedForThisUser >= maxFollowsPerUser) {
+          logger.log('Have reached followed limit for this user, stopping');
+          return;
         }
+
+        const graphqlUser = await navigateToUserAndGetData(follower);
+
+        const followedByCount = graphqlUser.edge_followed_by.count;
+        const followsCount = graphqlUser.edge_follow.count;
+        const isPrivate = graphqlUser.is_private;
+
+        // logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
+
+        const ratio = followedByCount / (followsCount || 1);
+
+        if (isPrivate && skipPrivate) {
+          logger.log('User is private, skipping');
+        } else if (
+          (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers) ||
+          (followUserMaxFollowing != null && followsCount > followUserMaxFollowing) ||
+          (followUserMinFollowers != null && followedByCount < followUserMinFollowers) ||
+          (followUserMinFollowing != null && followsCount < followUserMinFollowing)
+        ) {
+          logger.log('User has too many or too few followers or following, skipping.', 'followedByCount:', followedByCount, 'followsCount:', followsCount);
+        } else if (
+          (followUserRatioMax != null && ratio > followUserRatioMax) ||
+          (followUserRatioMin != null && ratio < followUserRatioMin)
+        ) {
+          logger.log('User has too many followers compared to follows or opposite, skipping');
+        } else {
+          await followCurrentUser(follower);
+          numFollowedForThisUser += 1;
+
+          await sleep(10000);
+
+          if (!isPrivate && enableLikeImages && !hasReachedDailyLikesLimit()) {
+            try {
+              await likeCurrentUserImages({ username: follower, likeImagesMin, likeImagesMax });
+            } catch (err) {
+              logger.error(`Failed to follow user's images ${follower}`, err);
+              await takeScreenshot();
+            }
+          }
+
+          await sleep(20000);
+          await throttle();
+        }
+      } catch (err) {
+        logger.error(`Failed to process follower ${follower}`, err);
+        await sleep(20000);
       }
     }
   }
@@ -672,57 +654,136 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
-  async function safelyUnfollowUserList(usersToUnfollow, limit, condition = () => true) {
-    logger.log('Unfollowing users, up to limit', limit);
+  async function safelyUnfollowUserList(usersToUnfollow, limit) {
+    logger.log(`Unfollowing ${usersToUnfollow.length} users`);
 
     let i = 0; // Number of people processed
     let j = 0; // Number of people actually unfollowed (button pressed)
 
-    for await (const listOrUsername of usersToUnfollow) {
-      // backward compatible:
-      const list = Array.isArray(listOrUsername) ? listOrUsername : [listOrUsername];
+    for (const username of usersToUnfollow) {
+      try {
+        const userFound = await navigateToUser(username);
 
-      for (const username of list) {
-        if (await condition(username)) {
-          try {
-            const userFound = await navigateToUser(username);
+        if (!userFound) {
+          await addPrevUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
+          await sleep(3000);
+        } else {
+          const { noActionTaken } = await unfollowCurrentUser(username);
 
-            if (!userFound) {
-              await addPrevUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
-              await sleep(3000);
-            } else {
-              const { noActionTaken } = await unfollowUser(username);
+          if (noActionTaken) {
+            await sleep(3000);
+          } else {
+            await sleep(15000);
+            j += 1;
 
-              if (noActionTaken) {
-                await sleep(3000);
-              } else {
-                await sleep(15000);
-                j += 1;
-
-                if (j % 10 === 0) {
-                  logger.log('Have unfollowed 10 users since last break. Taking a break');
-                  await sleep(10 * 60 * 1000, 0.1);
-                }
-              }
+            if (j % 10 === 0) {
+              logger.log('Have unfollowed 10 users since last break. Taking a break');
+              await sleep(10 * 60 * 1000, 0.1);
             }
-
-            i += 1;
-            logger.log(`Have now unfollowed (or tried to unfollow) ${i} users`);
-
-            if (limit && j >= limit) {
-              logger.log(`Have unfollowed limit of ${limit}, stopping`);
-              return j;
-            }
-
-            await throttle();
-          } catch (err) {
-            logger.error('Failed to unfollow, continuing with next', err);
           }
         }
+
+        i += 1;
+        logger.log(`Have now unfollowed ${i} users of total ${usersToUnfollow.length}`);
+
+        if (limit && j >= limit) {
+          logger.log(`Have unfollowed limit of ${limit}, stopping`);
+          return;
+        }
+
+        await throttle();
+      } catch (err) {
+        logger.error('Failed to unfollow, continuing with next', err);
       }
     }
+  }
 
-    return j;
+  async function unfollowNonMutualFollowers({ limit } = {}) {
+    logger.log('Unfollowing non-mutual followers...');
+    const userData = await navigateToUserAndGetData(myUsername);
+
+    const allFollowers = await getFollowersOrFollowing({
+      userId: userData.id,
+      getFollowers: true,
+    });
+    const allFollowing = await getFollowersOrFollowing({
+      userId: userData.id,
+      getFollowers: false,
+    });
+    // logger.log('allFollowers:', allFollowers, 'allFollowing:', allFollowing);
+
+    const usersToUnfollow = allFollowing.filter((u) => {
+      if (allFollowers.includes(u)) return false; // Follows us
+      if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
+      if (haveRecentlyFollowedUser(u)) {
+        logger.log(`Have recently followed user ${u}, skipping`);
+        return false;
+      }
+      return true;
+    });
+
+    logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
+
+    await safelyUnfollowUserList(usersToUnfollow, limit);
+  }
+
+  async function unfollowAllUnknown({ limit } = {}) {
+    logger.log('Unfollowing all except excludes and auto followed');
+    const userData = await navigateToUserAndGetData(myUsername);
+
+    const allFollowing = await getFollowersOrFollowing({
+      userId: userData.id,
+      getFollowers: false,
+    });
+    // logger.log('allFollowing', allFollowing);
+
+    const usersToUnfollow = allFollowing.filter((u) => {
+      if (getPrevFollowedUser(u)) return false;
+      if (excludeUsers.includes(u)) return false; // User is excluded by exclude list
+      return true;
+    });
+
+    logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
+
+    await safelyUnfollowUserList(usersToUnfollow, limit);
+  }
+
+  async function unfollowOldFollowed({ ageInDays, limit } = {}) {
+    assert(ageInDays);
+
+    logger.log(`Unfollowing currently followed users who were auto-followed more than ${ageInDays} days ago...`);
+
+    const userData = await navigateToUserAndGetData(myUsername);
+
+    const allFollowing = await getFollowersOrFollowing({
+      userId: userData.id,
+      getFollowers: false,
+    });
+    // logger.log('allFollowing', allFollowing);
+
+    const usersToUnfollow = allFollowing.filter(u =>
+      getPrevFollowedUser(u) &&
+      !excludeUsers.includes(u) &&
+      (new Date().getTime() - getPrevFollowedUser(u).time) / (1000 * 60 * 60 * 24) > ageInDays)
+      .slice(0, limit);
+
+    logger.log('usersToUnfollow', JSON.stringify(usersToUnfollow));
+
+    await safelyUnfollowUserList(usersToUnfollow, limit);
+
+    return usersToUnfollow.length;
+  }
+
+  async function listManuallyFollowedUsers() {
+    const userData = await navigateToUserAndGetData(myUsername);
+
+    const allFollowing = await getFollowersOrFollowing({
+      userId: userData.id,
+      getFollowers: false,
+    });
+
+    return allFollowing.filter(u =>
+      !getPrevFollowedUser(u) && !excludeUsers.includes(u));
   }
 
   function getPage() {
@@ -730,10 +791,6 @@ const Instauto = async (db, browser, options) => {
   }
 
   page = await browser.newPage();
-
-  // https://github.com/mifi/SimpleInstaBot/issues/118#issuecomment-1067883091
-  await page.setExtraHTTPHeaders({ 'Accept-Language': 'en' });
-
   if (randomizeUserAgent) {
     const userAgentGenerated = new UserAgent({ deviceCategory: 'desktop' });
     await page.setUserAgent(userAgentGenerated.toString());
@@ -745,19 +802,27 @@ const Instauto = async (db, browser, options) => {
   const goHome = async () => page.goto(`${instagramBaseUrl}/?hl=en`);
 
   // https://github.com/mifi/SimpleInstaBot/issues/28
-  async function setLang(short, long, assumeLoggedIn = false) {
+  async function setLang(short, long) {
     logger.log(`Setting language to ${long} (${short})`);
+
+    // This doesn't seem to always work, hence why it's just a fallback now
+    async function fallbackSetLang() {
+      await goHome();
+      await sleep(1000);
+
+      await page.setCookie({
+        name: 'ig_lang',
+        value: short,
+        path: '/',
+      });
+      await sleep(1000);
+      await goHome();
+      await sleep(3000);
+    }
 
     try {
       await sleep(1000);
-
-      // when logged in, we need to go to account in order to be able to check/set language
-      // (need to see the footer)
-      if (assumeLoggedIn) {
-        await page.goto(`${instagramBaseUrl}/accounts/edit/`);
-      } else {
-        await goHome();
-      }
+      await goHome();
       await sleep(3000);
       const elementHandles = await page.$x(`//select[//option[@value='${short}' and text()='${long}']]`);
       if (elementHandles.length < 1) throw new Error('Language selector not found');
@@ -776,10 +841,6 @@ const Instauto = async (db, browser, options) => {
 
       if (alreadyEnglish) {
         logger.log('Already English language');
-        if (!assumeLoggedIn) {
-          await goHome(); // because we were on the settings page
-          await sleep(1000);
-        }
         return;
       }
 
@@ -789,23 +850,12 @@ const Instauto = async (db, browser, options) => {
       await sleep(1000);
     } catch (err) {
       logger.error('Failed to set language, trying fallback (cookie)', err);
-      // This doesn't seem to always work, hence why it's just a fallback now
-      await goHome();
-      await sleep(1000);
-
-      await page.setCookie({
-        name: 'ig_lang',
-        value: short,
-        path: '/',
-      });
-      await sleep(1000);
-      await goHome();
-      await sleep(3000);
+      await fallbackSetLang();
     }
   }
 
-  const setEnglishLang = async (assumeLoggedIn) => setLang('en', 'English', assumeLoggedIn);
-  // const setEnglishLang = async (assumeLoggedIn) => setLang('de', 'Deutsch', assumeLoggedIn);
+  const setEnglishLang = async () => setLang('en', 'English');
+  // const setEnglishLang = async () => setLang('de', 'Deutsch');
 
   async function tryPressButton(elementHandles, name, sleepMs = 3000) {
     try {
@@ -819,7 +869,7 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
-  await setEnglishLang(false);
+  await setEnglishLang();
 
   await tryPressButton(await page.$x('//button[contains(text(), "Accept")]'), 'Accept cookies dialog');
   await tryPressButton(await page.$x('//button[contains(text(), "Only allow essential cookies")]'), 'Accept cookies dialog 2 button 1', 10000);
@@ -874,8 +924,7 @@ const Instauto = async (db, browser, options) => {
     }
 
     // In case language gets reset after logging in
-    // https://github.com/mifi/SimpleInstaBot/issues/118
-    await setEnglishLang(true);
+    await setEnglishLang();
 
     // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
     await tryPressButton(await page.$x('//button[contains(text(), "Save Info")]'), 'Login info dialog: Save Info');
@@ -899,125 +948,13 @@ const Instauto = async (db, browser, options) => {
     logger.error('Failed to detect username', err);
   }
 
-  if (!myUsername) {
-    throw new Error('Don\'t know what\'s my username');
-  }
-
-  const myUserData = await navigateToUserAndGetData(myUsername);
-  const myUserId = myUserData.id;
-
-  // --- END OF INITIALIZATION
-
-  async function doesUserFollowMe(username) {
-    try {
-      logger.info('Checking if user', username, 'follows us');
-      const userData = await navigateToUserAndGetData(username);
-      const userId = userData.id;
-
-      const elementHandles = await page.$x("//a[contains(.,' following')][contains(@href,'/following')]");
-      if (elementHandles.length === 0) throw new Error('Following button not found');
-
-      const [foundResponse] = await Promise.all([
-        page.waitForResponse((response) => {
-          const request = response.request();
-          return request.method() === 'GET' && new RegExp(`instagram.com/api/v1/friendships/${userId}/following/`).test(request.url());
-        }),
-        elementHandles[0].click(),
-        // page.waitForNavigation({ waitUntil: 'networkidle0' }),
-      ]);
-
-      const { users } = JSON.parse(await foundResponse.text());
-      if (users.length < 2) throw new Error('Unable to find user follows list');
-      // console.log(users, myUserId);
-      return users.some((user) => String(user.pk) === String(myUserId) || user.username === myUsername); // If they follow us, we will show at the top of the list
-    } catch (err) {
-      logger.error('Failed to check if user follows us', err);
-      return undefined;
-    }
-  }
-
-  async function unfollowNonMutualFollowers({ limit } = {}) {
-    logger.log(`Unfollowing non-mutual followers (limit ${limit})...`);
-
-    /* const allFollowers = await getFollowersOrFollowing({
-      userId: myUserId,
-      getFollowers: true,
-    }); */
-    const allFollowingGenerator = getFollowersOrFollowingGenerator({
-      userId: myUserId,
-      getFollowers: false,
-    });
-
-    async function condition(username) {
-      // if (allFollowers.includes(u)) return false; // Follows us
-      if (excludeUsers.includes(username)) return false; // User is excluded by exclude list
-      if (haveRecentlyFollowedUser(username)) {
-        logger.log(`Have recently followed user ${username}, skipping`);
-        return false;
-      }
-
-      const followsMe = await doesUserFollowMe(username);
-      logger.info('User follows us?', followsMe);
-      return followsMe === false;
-    }
-
-    await safelyUnfollowUserList(allFollowingGenerator, limit, condition);
-  }
-
-  async function unfollowAllUnknown({ limit } = {}) {
-    logger.log('Unfollowing all except excludes and auto followed');
-
-    const unfollowUsersGenerator = getFollowersOrFollowingGenerator({
-      userId: myUserId,
-      getFollowers: false,
-    });
-
-    function condition(username) {
-      if (getPrevFollowedUser(username)) return false; // we followed this user, so it's not unknown
-      if (excludeUsers.includes(username)) return false; // User is excluded by exclude list
-      return true;
-    }
-
-    await safelyUnfollowUserList(unfollowUsersGenerator, limit, condition);
-  }
-
-  async function unfollowOldFollowed({ ageInDays, limit } = {}) {
-    assert(ageInDays);
-
-    logger.log(`Unfollowing currently followed users who were auto-followed more than ${ageInDays} days ago (limit ${limit})...`);
-
-    const followingUsersGenerator = getFollowersOrFollowingGenerator({
-      userId: myUserId,
-      getFollowers: false,
-    });
-
-    function condition(username) {
-      return getPrevFollowedUser(username) &&
-        !excludeUsers.includes(username) &&
-        (new Date().getTime() - getPrevFollowedUser(username).time) / (1000 * 60 * 60 * 24) > ageInDays;
-    }
-
-    return safelyUnfollowUserList(followingUsersGenerator, limit, condition);
-  }
-
-  async function listManuallyFollowedUsers() {
-    const allFollowing = await getFollowersOrFollowing({
-      userId: myUserId,
-      getFollowers: false,
-    });
-
-    return allFollowing.filter(u =>
-      !getPrevFollowedUser(u) && !excludeUsers.includes(u));
-  }
-
   return {
     followUserFollowers,
     unfollowNonMutualFollowers,
     unfollowAllUnknown,
     unfollowOldFollowed,
-    followUser,
-    unfollowUser,
-    likeUserImages,
+    followCurrentUser,
+    unfollowCurrentUser,
     sleep,
     listManuallyFollowedUsers,
     getFollowersOrFollowing,
@@ -1025,7 +962,6 @@ const Instauto = async (db, browser, options) => {
     safelyUnfollowUserList,
     getPage,
     followUsersFollowers,
-    doesUserFollowMe,
   };
 };
 

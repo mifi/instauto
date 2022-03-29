@@ -7,21 +7,21 @@ const Instauto = require('instauto'); // eslint-disable-line import/no-unresolve
 const options = {
   cookiesPath: './cookies.json',
 
-  username: 'your-ig-username',
-  password: 'your-ig-password',
+  username: process.env.INSTAGRAM_USERNAME,
+  password: process.env.INSTAGRAM_PASSWORD,
 
   // Global limit that prevents follow or unfollows (total) to exceed this number over a sliding window of one hour:
-  maxFollowsPerHour: 20,
+  maxFollowsPerHour: process.env.MAX_FOLLOWS_PER_HOUR != null ? parseInt(process.env.MAX_FOLLOWS_PER_HOUR, 10) : 20,
   // Global limit that prevents follow or unfollows (total) to exceed this number over a sliding window of one day:
-  maxFollowsPerDay: 150,
+  maxFollowsPerDay: process.env.MAX_FOLLOWS_PER_DAY != null ? parseInt(process.env.MAX_FOLLOWS_PER_DAY, 10) : 150,
   // (NOTE setting the above parameters too high will cause temp ban/throttle)
 
-  maxLikesPerDay: 50,
+  maxLikesPerDay: process.env.MAX_LIKES_PER_DAY != null ? parseInt(process.env.MAX_LIKES_PER_DAY, 10) : 30,
 
   // Don't follow users that have a followers / following ratio less than this:
-  followUserRatioMin: 0.2,
+  followUserRatioMin: process.env.FOLLOW_USER_RATIO_MIN != null ? parseFloat(process.env.FOLLOW_USER_RATIO_MIN) : 0.2,
   // Don't follow users that have a followers / following ratio higher than this:
-  followUserRatioMax: 4.0,
+  followUserRatioMax: process.env.FOLLOW_USER_RATIO_MAX != null ? parseFloat(process.env.FOLLOW_USER_RATIO_MAX) : 4.0,
   // Don't follow users who have more followers than this:
   followUserMaxFollowers: null,
   // Don't follow users who have more people following them than this:
@@ -48,7 +48,7 @@ const options = {
   let browser;
 
   try {
-    browser = await puppeteer.launch({ headless: false });
+    browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox','--disable-setuid-sandbox'] });
 
     // Create a database where state will be loaded/saved to
     const instautoDb = await Instauto.JSONDB({
@@ -76,7 +76,9 @@ const options = {
     if (unfollowedCount > 0) await instauto.sleep(10 * 60 * 1000);
 
     // List of usernames that we should follow the followers of, can be celebrities etc.
-    const usersToFollowFollowersOf = ['lostleblanc', 'sam_kolder'];
+    const usersToFollowFollowersOf = process.env.USERS_TO_FOLLOW.length === 1 ?
+        process.env.USERS_TO_FOLLOW :
+        process.env.USERS_TO_FOLLOW.split(',');
 
     // Now go through each of these and follow a certain amount of their followers
     await instauto.followUsersFollowers({
