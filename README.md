@@ -16,7 +16,7 @@ Now there is a GUI application for those who don't want to code: [SimpleInstaBot
 
 - Open a terminal in the directory
 
-- Run `npm i -g yarn`
+- Run `npm i -g yarn` (On MacOsX Use `sudo npm i -g yarn`)
 
 - Run `yarn add puppeteer instauto`
 
