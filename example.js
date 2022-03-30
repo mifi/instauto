@@ -4,6 +4,8 @@ const puppeteer = require('puppeteer'); // eslint-disable-line import/no-extrane
 
 const Instauto = require('instauto'); // eslint-disable-line import/no-unresolved
 
+require('console-stamp')(console, {format: ':date(yyyy/mm/dd HH:MM:ss.l)'}); // add timestamps in front of log messages
+
 const options = {
   cookiesPath: './cookies.json',
 
