@@ -7,7 +7,7 @@ WORKDIR /app/instauto
 
 COPY package.json /app/instauto
 
-RUN npm install --save instauto
+RUN yarn add instauto
 
 COPY . /app/instauto
 

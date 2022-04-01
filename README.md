@@ -37,15 +37,6 @@ See [index.js](https://github.com/mifi/instauto/blob/master/index.js) for availa
 - The code automatically prevents breaching 100 follow/unfollows per hour or 700 per 24hr, to prevent bans. This can be configured.
 
 See [example.js](https://github.com/mifi/instauto/blob/master/example.js) for example of features
-
-## Docker compose
-
-We've added a Docker support for instauto! In the **environment** section of your `docker-compose.yml` you need to specify your configuration for login and performance. If you want to raise another container, just copy the service with diff name and run the compose.
-You'll need to specify different ports.
-
-```bash
-docker-compose --profile instaauto up -d**
-```
   
 ## Tips
 - Run this on a machine with a non-cloud IP to avoid being banned
@@ -84,6 +75,14 @@ pm2 startup
 ```
 
 Now it will run automatically on reboot! 🙌
+
+## Running in Docker
+
+We've added a Docker support for instauto! In the **environment** section of your `docker-compose.yml` you need to specify your configuration for login and performance. If you want to raise another container, just copy the service with diff name and run the compose. You'll need to specify different ports.
+
+```bash
+docker-compose --profile instauto up -d**
+```
 
 ## Donate 🙈
 
