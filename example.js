@@ -4,6 +4,10 @@ const puppeteer = require('puppeteer'); // eslint-disable-line import/no-extrane
 
 const Instauto = require('instauto'); // eslint-disable-line import/no-unresolved
 
+// Optional: Custom logger with timestamps
+const log = (fn, ...args) => console[fn](new Date().toISOString(), ...args);
+const logger = Object.fromEntries(['log', 'info', 'debug', 'error', 'trace', 'warn'].map((fn) => [fn, (...args) => log(fn, ...args)]));
+
 const options = {
   cookiesPath: './cookies.json',
 
@@ -42,6 +46,8 @@ const options = {
 
   // If true, will not do any actions (defaults to true)
   dryRun: false,
+  
+  logger,
 };
 
 (async () => {
