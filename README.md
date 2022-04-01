@@ -9,6 +9,7 @@ Now there is a GUI application for those who don't want to code: [SimpleInstaBot
 ## Setup
 
 - First install [Node.js](https://nodejs.org/en/) 8 or newer.
+  - On MacOS, it's recommended to use [homebrew](https://brew.sh/): `brew install node`
 
 - Create a new directory with a file like [example.js](https://github.com/mifi/instauto/blob/master/example.js)
 
