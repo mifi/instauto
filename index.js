@@ -136,17 +136,22 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function checkReachedFollowedUserDayLimit() {
-    const reachedFollowedUserDayLimit = getNumFollowedUsersThisTimeUnit(dayMs) >= maxFollowsPerDay;
-    if (reachedFollowedUserDayLimit) {
+    if (getNumFollowedUsersThisTimeUnit(dayMs) >= maxFollowsPerDay) {
       logger.log('Have reached daily follow/unfollow limit, waiting 10 min');
       await sleep(10 * 60 * 1000);
     }
   }
 
   async function checkReachedFollowedUserHourLimit() {
-    const hasReachedFollowedUserHourLimit = getNumFollowedUsersThisTimeUnit(hourMs) >= maxFollowsPerHour;
-    if (hasReachedFollowedUserHourLimit) {
+    if (getNumFollowedUsersThisTimeUnit(hourMs) >= maxFollowsPerHour) {
       logger.log('Have reached hourly follow rate limit, pausing 10 min');
+      await sleep(10 * 60 * 1000);
+    }
+  }
+
+  async function checkReachedLikedUserDayLimit() {
+    if (getNumLikesThisTimeUnit(dayMs) >= maxLikesPerDay) {
+      logger.log('Have reached daily like rate limit, pausing 10 min');
       await sleep(10 * 60 * 1000);
     }
   }
@@ -154,10 +159,7 @@ const Instauto = async (db, browser, options) => {
   async function throttle() {
     await checkReachedFollowedUserDayLimit();
     await checkReachedFollowedUserHourLimit();
-  }
-
-  function hasReachedDailyLikesLimit() {
-    return getNumLikesThisTimeUnit(dayMs) >= maxLikesPerDay;
+    await checkReachedLikedUserDayLimit();
   }
 
   function haveRecentlyFollowedUser(username) {
@@ -571,10 +573,57 @@ const Instauto = async (db, browser, options) => {
     await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax });
   }
 
-  async function followUserFollowers(username, {
+  async function followUserRespectingRestrictions({ username, skipPrivate = false }) {
+    if (getPrevFollowedUser(username)) {
+      logger.log('Skipping already followed user', username);
+      return false;
+    }
+    const graphqlUser = await navigateToUserAndGetData(username);
+
+    const followedByCount = graphqlUser.edge_followed_by.count;
+    const followsCount = graphqlUser.edge_follow.count;
+    const isPrivate = graphqlUser.is_private;
+
+    // logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
+
+    const ratio = followedByCount / (followsCount || 1);
+
+    if (isPrivate && skipPrivate) {
+      logger.log('User is private, skipping');
+      return false;
+    }
+    if (
+      (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers) ||
+      (followUserMaxFollowing != null && followsCount > followUserMaxFollowing) ||
+      (followUserMinFollowers != null && followedByCount < followUserMinFollowers) ||
+      (followUserMinFollowing != null && followsCount < followUserMinFollowing)
+    ) {
+      logger.log('User has too many or too few followers or following, skipping.', 'followedByCount:', followedByCount, 'followsCount:', followsCount);
+      return false;
+    }
+    if (
+      (followUserRatioMax != null && ratio > followUserRatioMax) ||
+      (followUserRatioMin != null && ratio < followUserRatioMin)
+    ) {
+      logger.log('User has too many followers compared to follows or opposite, skipping');
+      return false;
+    }
+
+    await followUser(username);
+
+    await sleep(30000);
+    await throttle();
+
+    return true;
+  }
+
+  async function processUserFollowers(username, {
     maxFollowsPerUser = 5, skipPrivate = false, enableLikeImages, likeImagesMin, likeImagesMax,
   } = {}) {
-    logger.log(`Following up to ${maxFollowsPerUser} followers of ${username}`);
+    const enableFollow = maxFollowsPerUser > 0;
+
+    if (enableFollow) logger.log(`Following up to ${maxFollowsPerUser} followers of ${username}`);
+    if (enableLikeImages) logger.log(`Liking images of up to ${likeImagesMax} followers of ${username}`);
 
     await throttle();
 
@@ -586,86 +635,52 @@ const Instauto = async (db, browser, options) => {
       logger.log('User followers batch', followersBatch);
 
       for (const follower of followersBatch) {
-        if (getPrevFollowedUser(follower)) {
-          logger.log('Skipping already followed user', follower);
-        } else {
-          try {
-            if (numFollowedForThisUser >= maxFollowsPerUser) {
-              logger.log('Have reached followed limit for this user, stopping');
-              return;
-            }
+        await throttle();
 
-            const graphqlUser = await navigateToUserAndGetData(follower);
-
-            const followedByCount = graphqlUser.edge_followed_by.count;
-            const followsCount = graphqlUser.edge_follow.count;
-            const isPrivate = graphqlUser.is_private;
-
-            // logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
-
-            const ratio = followedByCount / (followsCount || 1);
-
-            if (isPrivate && skipPrivate) {
-              logger.log('User is private, skipping');
-            } else if (
-              (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers) ||
-              (followUserMaxFollowing != null && followsCount > followUserMaxFollowing) ||
-              (followUserMinFollowers != null && followedByCount < followUserMinFollowers) ||
-              (followUserMinFollowing != null && followsCount < followUserMinFollowing)
-            ) {
-              logger.log('User has too many or too few followers or following, skipping.', 'followedByCount:', followedByCount, 'followsCount:', followsCount);
-            } else if (
-              (followUserRatioMax != null && ratio > followUserRatioMax) ||
-              (followUserRatioMin != null && ratio < followUserRatioMin)
-            ) {
-              logger.log('User has too many followers compared to follows or opposite, skipping');
-            } else {
-              await followUser(follower);
-              numFollowedForThisUser += 1;
-
-              await sleep(10000);
-
-              if (!isPrivate && enableLikeImages && !hasReachedDailyLikesLimit()) {
-                try {
-                  await likeUserImages({ username: follower, likeImagesMin, likeImagesMax });
-                } catch (err) {
-                  logger.error(`Failed to follow user's images ${follower}`, err);
-                  await takeScreenshot();
-                }
-              }
-
-              await sleep(20000);
-              await throttle();
-            }
-          } catch (err) {
-            logger.error(`Failed to process follower ${follower}`, err);
-            await sleep(20000);
+        try {
+          if (enableFollow && numFollowedForThisUser >= maxFollowsPerUser) {
+            logger.log('Have reached followed limit for this user, stopping');
+            return;
           }
+
+          if (enableFollow) {
+            if (await followUserRespectingRestrictions({ username: follower, skipPrivate })) {
+              numFollowedForThisUser += 1;
+            }
+          }
+
+          if (enableLikeImages) {
+            // Note: throws error if user isPrivate
+            await likeUserImages({ username: follower, likeImagesMin, likeImagesMax });
+          }
+        } catch (err) {
+          logger.error(`Failed to process follower ${follower}`, err);
+          await takeScreenshot();
+          await sleep(20000);
         }
       }
     }
   }
 
-  async function followUsersFollowers({ usersToFollowFollowersOf, maxFollowsTotal = 150, skipPrivate, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
-    if (!maxFollowsTotal || maxFollowsTotal <= 2) {
-      throw new Error(`Invalid parameter maxFollowsTotal ${maxFollowsTotal}`);
-    }
-
-
+  async function processUsersFollowers({ usersToFollowFollowersOf, maxFollowsTotal = 150, skipPrivate, enableFollow = true, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
     // If maxFollowsTotal turns out to be lower than the user list size, slice off the user list
     const usersToFollowFollowersOfSliced = shuffleArray(usersToFollowFollowersOf).slice(0, maxFollowsTotal);
 
-    // Round up or we risk following none
-    const maxFollowsPerUser = Math.floor(maxFollowsTotal / usersToFollowFollowersOfSliced.length) + 1;
+    const maxFollowsPerUser = enableFollow && usersToFollowFollowersOfSliced.length > 0 ? Math.floor(maxFollowsTotal / usersToFollowFollowersOfSliced.length) : 0;
+
+    if (maxFollowsPerUser === 0 && (!enableLikeImages || likeImagesMin < 1 || likeImagesMax < 1)) {
+      logger.warn('Nothing to follow or like');
+      return;
+    }
 
     for (const username of usersToFollowFollowersOfSliced) {
       try {
-        await followUserFollowers(username, { maxFollowsPerUser, skipPrivate, enableLikeImages, likeImagesMin, likeImagesMax });
+        await processUserFollowers(username, { maxFollowsPerUser, skipPrivate, enableLikeImages, likeImagesMin, likeImagesMax });
 
         await sleep(10 * 60 * 1000);
         await throttle();
       } catch (err) {
-        console.error('Failed to follow user followers, continuing', err);
+        logger.error('Failed to process user followers, continuing', username, err);
         await takeScreenshot();
         await sleep(60 * 1000);
       }
@@ -723,6 +738,22 @@ const Instauto = async (db, browser, options) => {
     }
 
     return j;
+  }
+
+  async function safelyFollowUserList({ users, skipPrivate, limit }) {
+    logger.log('Following users, up to limit', limit);
+
+    for (const username of users) {
+      await throttle();
+
+      try {
+        await followUserRespectingRestrictions({ username, skipPrivate });
+      } catch (err) {
+        logger.error(`Failed to follow user ${username}, continuing`, err);
+        await takeScreenshot();
+        await sleep(20000);
+      }
+    }
   }
 
   function getPage() {
@@ -1011,7 +1042,7 @@ const Instauto = async (db, browser, options) => {
   }
 
   return {
-    followUserFollowers,
+    followUserFollowers: processUserFollowers,
     unfollowNonMutualFollowers,
     unfollowAllUnknown,
     unfollowOldFollowed,
@@ -1023,8 +1054,9 @@ const Instauto = async (db, browser, options) => {
     getFollowersOrFollowing,
     getUsersWhoLikedContent,
     safelyUnfollowUserList,
+    safelyFollowUserList,
     getPage,
-    followUsersFollowers,
+    followUsersFollowers: processUsersFollowers,
     doesUserFollowMe,
   };
 };
