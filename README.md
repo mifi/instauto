@@ -81,7 +81,7 @@ Now it will run automatically on reboot! 🙌
 We've added a Docker support for instauto! In the **environment** section of your `docker-compose.yml` you need to specify your configuration for login and performance. If you want to raise another container, just copy the service with diff name and run the compose. You'll need to specify different ports.
 
 ```bash
-docker-compose --profile instauto up -d**
+docker-compose --profile instauto up -d
 ```
 
 ## Donate 🙈
