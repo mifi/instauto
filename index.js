@@ -59,6 +59,13 @@ const Instauto = async (db, browser, options) => {
 
   let myUsername = myUsernameIn;
 
+  let findUnfollowButton_selectorsList = [
+    "//header//button[text()='Following']",
+    "//header//button[text()='Requested']",
+    "//header//button[*//span[@aria-label='Following']]",
+    "//header//button[*//*[name()='svg'][@aria-label='Following']]"
+  ]
+
   assert(cookiesPath);
   assert(db);
 
@@ -299,17 +306,22 @@ const Instauto = async (db, browser, options) => {
     return undefined;
   }
 
+
+  /*
+    update this part for new "loop" that permit user to add themself their own page selector
+    please note that the page selector list is stored in: findUnfollowButton_selectorsList
+  */
   async function findUnfollowButton() {
-    const elementHandles = await page.$x("//header//button[text()='Following']");
-    if (elementHandles.length > 0) return elementHandles[0];
-
-    const elementHandles2 = await page.$x("//header//button[text()='Requested']");
-    if (elementHandles2.length > 0) return elementHandles2[0];
-
-    const elementHandles3 = await page.$x("//header//button[*//span[@aria-label='Following']]");
-    if (elementHandles3.length > 0) return elementHandles3[0];
-
+    for(let i = 0; i < this.findUnfollowButton_selectorsList.length; i++) {
+      let elementHandles = await page.$x(this.findUnfollowButton_selectorsList[i]);
+      if (elementHandles.length > 0) return elementHandles[0]; 
+    }
     return undefined;
+  }
+
+  // added this function for custom follow button
+  async function addCustomUnfollowButtonSelector(newString){
+    this.findUnfollowButton_selectorsList.push(newString);
   }
 
   async function findUnfollowConfirmButton() {
