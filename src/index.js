@@ -646,13 +646,13 @@ const Instauto = async (db, browser, options) => {
             return;
           }
 
-          if (enableFollow) {
-            if (await followUserRespectingRestrictions({ username: follower, skipPrivate })) {
-              numFollowedForThisUser += 1;
-            }
-          }
+          let didActuallyFollow = false;
+          if (enableFollow) didActuallyFollow = await followUserRespectingRestrictions({ username: follower, skipPrivate });
+          if (didActuallyFollow) numFollowedForThisUser += 1;
 
-          if (enableLikeImages) {
+          const didFailToFollow = enableFollow && !didActuallyFollow;
+
+          if (enableLikeImages && !didFailToFollow) {
             // Note: throws error if user isPrivate
             await likeUserImages({ username: follower, likeImagesMin, likeImagesMax });
           }
