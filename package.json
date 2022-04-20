@@ -2,11 +2,14 @@
   "name": "instauto",
   "version": "9.1.0",
   "description": "Instagram automation library written in Node.js",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
     "lint": "eslint .",
     "test": "exit 0"
   },
+  "files": [
+    "src"
+  ],
   "author": "Mikael Finstad <finstaden@gmail.com>",
   "repository": "mifi/instauto",
   "license": "MIT",
