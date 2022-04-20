@@ -46,7 +46,7 @@ const options = {
 
   // If true, will not do any actions (defaults to true)
   dryRun: false,
-  
+
   logger,
 };
 
