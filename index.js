@@ -308,7 +308,7 @@ const Instauto = async (db, browser, options) => {
 
     const elementHandles3 = await page.$x("//header//button[*//span[@aria-label='Following']]");
     if (elementHandles3.length > 0) return elementHandles3[0];
-    
+
     const elementHandles4 = await page.$x("//header//button[*//*[name()='svg'][@aria-label='Following']]");
     if (elementHandles4.length > 0) return elementHandles4[0];
 
