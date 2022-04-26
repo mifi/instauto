@@ -327,6 +327,11 @@ const Instauto = async (db, browser, options) => {
     if (!elementHandle) {
       if (await findUnfollowButton()) {
         logger.log('We are already following this user');
+
+        // Already following this user manually, add it to the database.
+        const entry = { username, manual: true, time: new Date().getTime() };
+        await addPrevFollowedUser(entry);
+
         await sleep(5000);
         return;
       }
