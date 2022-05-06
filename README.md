@@ -25,7 +25,7 @@ Now there is a GUI application for those who don't want to code: [SimpleInstaBot
 
 You can run this code for example once every day using cron or pm2 or similar
 
-See [index.js](https://github.com/mifi/instauto/blob/master/index.js) for available options.
+See [index.js](https://github.com/mifi/instauto/blob/master/src/index.js) for available options.
 
 ## Supported functionality
 
