@@ -45,6 +45,8 @@ const Instauto = async (db, browser, options) => {
     followUserMinFollowers = null,
     followUserMinFollowing = null,
 
+    shouldFollowUser = null,
+
     dontUnfollowUntilTimeElapsed = 3 * 24 * 60 * 60 * 1000,
 
     excludeUsers = [],
@@ -586,6 +588,15 @@ const Instauto = async (db, browser, options) => {
     const followedByCount = graphqlUser.edge_followed_by.count;
     const followsCount = graphqlUser.edge_follow.count;
     const isPrivate = graphqlUser.is_private;
+    const isVerified = graphqlUser.is_verified;
+    const isBusinessAccount = graphqlUser.is_business_account;
+    const isProfessionalAccount = graphqlUser.is_professional_account;
+    const fullName = graphqlUser.full_name;
+    const biography = graphqlUser.biography;
+    const profilePicUrlHd = graphqlUser.profile_pic_url_hd;
+    const externalUrl = graphqlUser.external_url;
+    const businessCategoryName = graphqlUser.business_category_name;
+    const categoryName = graphqlUser.category_name;
 
     // logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
 
@@ -609,6 +620,10 @@ const Instauto = async (db, browser, options) => {
       (followUserRatioMin != null && ratio < followUserRatioMin)
     ) {
       logger.log('User has too many followers compared to follows or opposite, skipping');
+      return false;
+    }
+    if (shouldFollowUser !== null && (typeof shouldFollowUser === 'function' && !shouldFollowUser({username: username, isVerified: isVerified, isBusinessAccount: isBusinessAccount, isProfessionalAccount: isProfessionalAccount, fullName: fullName, biography: biography, profilePicUrlHd: profilePicUrlHd, externalUrl: externalUrl, businessCategoryName: businessCategoryName, categoryName: categoryName}) === true)) {
+      logger.log(`Custom follow logic returned false for ${username}, skipping`);
       return false;
     }
 
