@@ -585,18 +585,7 @@ const Instauto = async (db, browser, options) => {
     }
     const graphqlUser = await navigateToUserAndGetData(username);
 
-    const followedByCount = graphqlUser.edge_followed_by.count;
-    const followsCount = graphqlUser.edge_follow.count;
-    const isPrivate = graphqlUser.is_private;
-    const isVerified = graphqlUser.is_verified;
-    const isBusinessAccount = graphqlUser.is_business_account;
-    const isProfessionalAccount = graphqlUser.is_professional_account;
-    const fullName = graphqlUser.full_name;
-    const biography = graphqlUser.biography;
-    const profilePicUrlHd = graphqlUser.profile_pic_url_hd;
-    const externalUrl = graphqlUser.external_url;
-    const businessCategoryName = graphqlUser.business_category_name;
-    const categoryName = graphqlUser.category_name;
+    const { edge_followed_by: { count: followedByCount }, edge_follow: { count: followsCount }, is_private: isPrivate, is_verified: isVerified, is_business_account: isBusinessAccount, is_professional_account: isProfessionalAccount, full_name: fullName, biography, profile_pic_url_hd: profilePicUrlHd, external_url: externalUrl, business_category_name: businessCategoryName, category_name: categoryName } = graphqlUser;
 
     // logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
 
@@ -622,7 +611,7 @@ const Instauto = async (db, browser, options) => {
       logger.log('User has too many followers compared to follows or opposite, skipping');
       return false;
     }
-    if (shouldFollowUser !== null && (typeof shouldFollowUser === 'function' && !shouldFollowUser({username: username, isVerified: isVerified, isBusinessAccount: isBusinessAccount, isProfessionalAccount: isProfessionalAccount, fullName: fullName, biography: biography, profilePicUrlHd: profilePicUrlHd, externalUrl: externalUrl, businessCategoryName: businessCategoryName, categoryName: categoryName}) === true)) {
+    if (shouldFollowUser !== null && (typeof shouldFollowUser === 'function' && !shouldFollowUser({ username, isVerified, isBusinessAccount, isProfessionalAccount, fullName, biography, profilePicUrlHd, externalUrl, businessCategoryName, categoryName }) === true)) {
       logger.log(`Custom follow logic returned false for ${username}, skipping`);
       return false;
     }

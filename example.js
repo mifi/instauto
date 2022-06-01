@@ -41,7 +41,7 @@ const options = {
   shouldFollowUser: function (data) {
     console.log('isBusinessAccount:', data.isBusinessAccount);
     return !data.isBusinessAccount;
-  },*/
+  }, */
   /* Example to skip accounts with 'crypto' & 'bitcoin' in their bio or username
   shouldFollowUser: function (data) {
     console.log('username:', data.username, 'biography:', data.biography);
@@ -50,7 +50,7 @@ const options = {
       return false;
     }
     return true;
-  },*/
+  }, */
 
   // NOTE: The dontUnfollowUntilTimeElapsed option is ONLY for the unfollowNonMutualFollowers function
   // This specifies the time during which the bot should not touch users that it has previously followed (in milliseconds)
