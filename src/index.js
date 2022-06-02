@@ -73,7 +73,6 @@ const Instauto = async (db, browser, options) => {
 
   // State
   let page;
-  let graphqlUserMissing = false;
 
   async function takeScreenshot() {
     if (!screenshotOnError) return;
@@ -221,37 +220,17 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function navigateToUserAndGetData(username) {
-    // https://github.com/mifi/SimpleInstaBot/issues/36
-    if (graphqlUserMissing) {
-      // https://stackoverflow.com/questions/37593025/instagram-api-get-the-userid
-      // https://stackoverflow.com/questions/17373886/how-can-i-get-a-users-media-from-instagram-without-authenticating-as-a-user
-      const found = await safeGotoUser(`${instagramBaseUrl}/${encodeURIComponent(username)}?__a=1`);
-      if (!found) throw new Error('User not found');
+    const [foundResponse] = await Promise.all([
+      page.waitForResponse((response) => {
+        const request = response.request();
+        return request.method() === 'GET' && new RegExp(`https:\\/\\/i\\.instagram\\.com\\/api\\/v1\\/users\\/web_profile_info\\/\\?username=${encodeURIComponent(username.toLowerCase())}`).test(request.url());
+      }),
+      navigateToUserWithCheck(username),
+      // page.waitForNavigation({ waitUntil: 'networkidle0' }),
+    ]);
 
-      const json = await getPageJson();
-
-      const { user } = json.graphql;
-
-      await navigateToUserWithCheck(username);
-      return user;
-    }
-
-    await navigateToUserWithCheck(username);
-
-    // eslint-disable-next-line no-underscore-dangle
-    const sharedData = await page.evaluate(() => window._sharedData);
-    try {
-      // eslint-disable-next-line prefer-destructuring
-      return sharedData.entry_data.ProfilePage[0].graphql.user;
-
-      // JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window.__additionalDataLoaded(\'feed\',')).innerHTML.replace(/^window.__additionalDataLoaded\('feed',({.*})\);$/, '$1'));
-      // JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window._sharedData')).innerHTML.replace(/^window._sharedData ?= ?({.*});$/, '$1'));
-      // Array.from(document.getElementsByTagName('a')).find(el => el.attributes?.href?.value.includes(`${username}/followers`)).innerText
-    } catch (err) {
-      logger.warn('Missing graphql in page, falling back to alternative method...');
-      graphqlUserMissing = true; // Store as state so we don't have to do this every time from now on.
-      return navigateToUserAndGetData(username); // Now try again with alternative method
-    }
+    const json = JSON.parse(await foundResponse.text());
+    return json.data.user;
   }
 
   async function isActionBlocked() {
@@ -581,6 +560,7 @@ const Instauto = async (db, browser, options) => {
       logger.log('Skipping already followed user', username);
       return false;
     }
+
     const graphqlUser = await navigateToUserAndGetData(username);
 
     const followedByCount = graphqlUser.edge_followed_by.count;
@@ -632,9 +612,9 @@ const Instauto = async (db, browser, options) => {
 
     let numFollowedForThisUser = 0;
 
-    const userData = await navigateToUserAndGetData(username);
+    const { id: userId } = await navigateToUserAndGetData(username);
 
-    for await (const followersBatch of getFollowersOrFollowingGenerator({ userId: userData.id, getFollowers: true })) {
+    for await (const followersBatch of getFollowersOrFollowingGenerator({ userId, getFollowers: true })) {
       logger.log('User followers batch', followersBatch);
 
       for (const follower of followersBatch) {
@@ -937,16 +917,14 @@ const Instauto = async (db, browser, options) => {
     throw new Error('Don\'t know what\'s my username');
   }
 
-  const myUserData = await navigateToUserAndGetData(myUsername);
-  const myUserId = myUserData.id;
+  const { id: myUserId } = await navigateToUserAndGetData(myUsername);
 
   // --- END OF INITIALIZATION
 
   async function doesUserFollowMe(username) {
     try {
       logger.info('Checking if user', username, 'follows us');
-      const userData = await navigateToUserAndGetData(username);
-      const userId = userData.id;
+      const { id: userId } = await navigateToUserAndGetData(username);
 
       const elementHandles = await page.$x("//a[contains(.,' following')][contains(@href,'/following')]");
       if (elementHandles.length === 0) throw new Error('Following button not found');
