@@ -58,6 +58,7 @@ const Instauto = async (db, browser, options) => {
   } = options;
 
   let myUsername = myUsernameIn;
+  const userDataCache = {};
 
   assert(cookiesPath);
   assert(db);
@@ -168,15 +169,20 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function gotoWithRetry(url) {
+    const maxAttempts = 3;
     for (let attempt = 0; ; attempt += 1) {
       logger.log(`Goto ${url}`);
       const response = await page.goto(url);
-      await sleep(1000);
+      await sleep(2000);
       const status = response.status();
 
       // https://www.reddit.com/r/Instagram/comments/kwrt0s/error_560/
       // https://github.com/mifi/instauto/issues/60
-      if (![560, 429].includes(status) || attempt > 3) return status;
+      if (![560, 429].includes(status)) return status;
+
+      if (attempt > maxAttempts) {
+        throw new Error(`Navigate to user failed after ${maxAttempts} attempts, last status: ${status}`);
+      }
 
       logger.info(`Got ${status} - Retrying request later...`);
       if (status === 429) logger.warn('429 Too Many Requests could mean that Instagram suspects you\'re using a bot. You could try to use the Instagram Mobile app from the same IP for a few days first');
@@ -184,42 +190,61 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
-  async function safeGotoUser(url, checkPageForUsername) {
-    const status = await gotoWithRetry(url);
-    if (status === 200) {
-      if (checkPageForUsername != null) {
-        // some pages return 200 but nothing there (I think deleted accounts)
-        // https://github.com/mifi/SimpleInstaBot/issues/48
-        // example: https://www.instagram.com/victorialarson__/
-        // so we check if the page has the user's name on it
-        return page.evaluate((username) => window.find(username), checkPageForUsername);
-      }
-      return true;
-    }
-    if (status === 404) {
-      logger.log('User not found');
-      return false;
-    }
-    throw new Error(`Navigate to user failed with status ${status}`);
+  const getUserPageUrl = (username) => `${instagramBaseUrl}/${encodeURIComponent(username)}`;
+
+  function isAlreadyOnUserPage(username) {
+    const url = getUserPageUrl(username);
+    // optimization: already on URL? (ignore trailing slash)
+    return (page.url().replace(/\/$/, '') === url.replace(/\/$/, ''));
   }
 
   async function navigateToUser(username) {
-    const url = `${instagramBaseUrl}/${encodeURIComponent(username)}`;
-    if (page.url().replace(/\/$/, '') === url.replace(/\/$/, '')) return true; // optimization: already on URL? (ignore trailing slash)
+    if (isAlreadyOnUserPage(username)) return true;
+
     // logger.log('navigating from', page.url(), 'to', url);
     logger.log(`Navigating to user ${username}`);
-    return safeGotoUser(url, username);
+
+    const url = getUserPageUrl(username);
+    const status = await gotoWithRetry(url);
+    if (status === 404) {
+      logger.warn('User page returned 404');
+      return false;
+    }
+
+    if (status === 200) {
+      // some pages return 200 but nothing there (I think deleted accounts)
+      // https://github.com/mifi/SimpleInstaBot/issues/48
+      // example: https://www.instagram.com/victorialarson__/
+      // so we check if the page has the user's name on it
+      const foundUsernameOnPage = await page.evaluate((u) => window.find(u), username);
+      if (!foundUsernameOnPage) logger.warn(`Cannot find "${username}" on page`);
+      return foundUsernameOnPage;
+    }
+
+    throw new Error(`Navigate to user failed with status ${status}`);
   }
 
   async function navigateToUserWithCheck(username) {
     if (!(await navigateToUser(username))) throw new Error('User not found');
   }
 
-  async function getPageJson() {
-    return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
-  }
-
   async function navigateToUserAndGetData(username) {
+    const cachedUserData = userDataCache[username];
+
+    if (isAlreadyOnUserPage(username)) {
+      // assume we have data
+      return cachedUserData;
+    }
+
+    if (cachedUserData != null) {
+      // if we already have userData, just navigate
+      await navigateToUserWithCheck(username);
+      return cachedUserData;
+    }
+
+    // intercept special XHR network request that fetches user's data and store it in a cache
+    // TODO fallback to DOM to get user ID if this request fails?
+    // https://github.com/mifi/SimpleInstaBot/issues/125#issuecomment-1145354294
     const [foundResponse] = await Promise.all([
       page.waitForResponse((response) => {
         const request = response.request();
@@ -230,7 +255,13 @@ const Instauto = async (db, browser, options) => {
     ]);
 
     const json = JSON.parse(await foundResponse.text());
-    return json.data.user;
+    const userData = json.data.user;
+    userDataCache[username] = userData;
+    return userData;
+  }
+
+  async function getPageJson() {
+    return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
   }
 
   async function isActionBlocked() {
@@ -300,7 +331,7 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function followUser(username) {
-    await navigateToUserWithCheck(username);
+    await navigateToUserAndGetData(username);
     const elementHandle = await findFollowButton();
 
     if (!elementHandle) {
@@ -342,7 +373,7 @@ const Instauto = async (db, browser, options) => {
   // See https://github.com/timgrossmann/InstaPy/pull/2345
   // https://github.com/timgrossmann/InstaPy/issues/2355
   async function unfollowUser(username) {
-    await navigateToUserWithCheck(username);
+    await navigateToUserAndGetData(username);
     logger.log(`Unfollowing user ${username}`);
 
     const res = { username, time: new Date().getTime() };
@@ -541,7 +572,7 @@ const Instauto = async (db, browser, options) => {
   async function likeUserImages({ username, likeImagesMin, likeImagesMax } = {}) {
     if (!likeImagesMin || !likeImagesMax || likeImagesMax < likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
 
-    await navigateToUserWithCheck(username);
+    await navigateToUserAndGetData(username);
 
     logger.log(`Liking ${likeImagesMin}-${likeImagesMax} user images`);
     try {
@@ -686,6 +717,8 @@ const Instauto = async (db, browser, options) => {
             const userFound = await navigateToUser(username);
 
             if (!userFound) {
+              // to avoid repeatedly unfollowing failed users, flag them as already unfollowed
+              logger.log('User not found for unfollow');
               await addPrevUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
               await sleep(3000);
             } else {
@@ -719,6 +752,8 @@ const Instauto = async (db, browser, options) => {
         }
       }
     }
+
+    logger.log('Done with unfollowing', i, j);
 
     return j;
   }
