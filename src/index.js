@@ -553,7 +553,7 @@ const Instauto = async (db, browser, options) => {
 
       await window.instautoSleep(3000);
 
-      const closeButtonChild = document.querySelector('button [aria-label=Close]');
+      const closeButtonChild = document.querySelector('svg[aria-label="Close"]');
 
       if (!closeButtonChild) throw new Error('Close button not found (aria-label)');
 
