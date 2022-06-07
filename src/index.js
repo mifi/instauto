@@ -324,8 +324,14 @@ const Instauto = async (db, browser, options) => {
     const elementHandles3 = await page.$x("//header//button[*//span[@aria-label='Following']]");
     if (elementHandles3.length > 0) return elementHandles3[0];
 
-    const elementHandles4 = await page.$x("//header//button[*//*[name()='svg'][@aria-label='Following']]");
+    const elementHandles4 = await page.$x("//header//button[*//span[@aria-label='Requested']]");
     if (elementHandles4.length > 0) return elementHandles4[0];
+
+    const elementHandles5 = await page.$x("//header//button[*//*[name()='svg'][@aria-label='Following']]");
+    if (elementHandles5.length > 0) return elementHandles5[0];
+
+    const elementHandles6 = await page.$x("//header//button[*//*[name()='svg'][@aria-label='Requested']]");
+    if (elementHandles6.length > 0) return elementHandles6[0];
 
     return undefined;
   }
