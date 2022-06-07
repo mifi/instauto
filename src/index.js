@@ -170,11 +170,14 @@ const Instauto = async (db, browser, options) => {
     return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
   }
 
+  // See https://github.com/mifi/SimpleInstaBot/issues/140#issuecomment-1149105387
+  const gotoUrl = async (url) => page.goto(url, { waitUntil: ['load', 'domcontentloaded', 'networkidle0'] });
+
   async function gotoWithRetry(url) {
     const maxAttempts = 3;
     for (let attempt = 0; ; attempt += 1) {
       logger.log(`Goto ${url}`);
-      const response = await page.goto(url);
+      const response = await gotoUrl(url);
       await sleep(2000);
       const status = response.status();
 
@@ -795,7 +798,7 @@ const Instauto = async (db, browser, options) => {
 
   if (enableCookies) await tryLoadCookies();
 
-  const goHome = async () => page.goto(`${instagramBaseUrl}/?hl=en`);
+  const goHome = async () => gotoUrl(`${instagramBaseUrl}/?hl=en`);
 
   // https://github.com/mifi/SimpleInstaBot/issues/28
   async function setLang(short, long, assumeLoggedIn = false) {
@@ -807,7 +810,7 @@ const Instauto = async (db, browser, options) => {
       // when logged in, we need to go to account in order to be able to check/set language
       // (need to see the footer)
       if (assumeLoggedIn) {
-        await page.goto(`${instagramBaseUrl}/accounts/edit/`);
+        await gotoUrl(`${instagramBaseUrl}/accounts/edit/`);
       } else {
         await goHome();
       }
