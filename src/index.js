@@ -315,23 +315,23 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function findUnfollowButton() {
-    const elementHandles = await page.$x("//header//button[text()='Following']");
+    let button = await findButtonWithText('Following');
+    if (button) return button;
+
+    button = await findButtonWithText('Requested');
+    if (button) return button;
+
+    let elementHandles = await page.$x("//header//button[*//span[@aria-label='Following']]");
     if (elementHandles.length > 0) return elementHandles[0];
 
-    const elementHandles2 = await page.$x("//header//button[text()='Requested']");
-    if (elementHandles2.length > 0) return elementHandles2[0];
+    elementHandles = await page.$x("//header//button[*//span[@aria-label='Requested']]");
+    if (elementHandles.length > 0) return elementHandles[0];
 
-    const elementHandles3 = await page.$x("//header//button[*//span[@aria-label='Following']]");
-    if (elementHandles3.length > 0) return elementHandles3[0];
+    elementHandles = await page.$x("//header//button[*//*[name()='svg'][@aria-label='Following']]");
+    if (elementHandles.length > 0) return elementHandles[0];
 
-    const elementHandles4 = await page.$x("//header//button[*//span[@aria-label='Requested']]");
-    if (elementHandles4.length > 0) return elementHandles4[0];
-
-    const elementHandles5 = await page.$x("//header//button[*//*[name()='svg'][@aria-label='Following']]");
-    if (elementHandles5.length > 0) return elementHandles5[0];
-
-    const elementHandles6 = await page.$x("//header//button[*//*[name()='svg'][@aria-label='Requested']]");
-    if (elementHandles6.length > 0) return elementHandles6[0];
+    elementHandles = await page.$x("//header//button[*//*[name()='svg'][@aria-label='Requested']]");
+    if (elementHandles.length > 0) return elementHandles[0];
 
     return undefined;
   }
