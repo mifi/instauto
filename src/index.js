@@ -914,7 +914,13 @@ const Instauto = async (db, browser, options) => {
         await loginButton.click();
         break;
       }
-      logger.warn('Login button not found. Maybe you can help me click it? And also report an issue on github with a screenshot of what you\'re seeing :)');
+      logger.warn('Login button not found. Trying second method.');
+      const loginButton2 = (await page.$x("//button/div['Log In']"))[0];
+      if (loginButton2) {
+        await loginButton2.click();
+        break;
+      }
+      logger.warn('Login button not found. Maybe you can help me click it? And also report an issue on GitHub with a screenshot of what you\'re seeing :)');
       await sleep(6000);
     }
 
