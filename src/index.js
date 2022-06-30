@@ -881,6 +881,19 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
+  async function tryClickLogin() {
+    async function tryClickButton(xpath) {
+      const btn = (await page.$x(xpath))[0];
+      if (!btn) return false;
+      await btn.click();
+      return true;
+    }
+
+    if (await tryClickButton("//button[.//text() = 'Log In']")) return true;
+    if (await tryClickButton("//button[.//text() = 'Log in']")) return true; // https://github.com/mifi/instauto/pull/110 https://github.com/mifi/instauto/issues/109
+    return false;
+  }
+
   await setEnglishLang(false);
 
   await tryPressButton(await page.$x('//button[contains(text(), "Accept")]'), 'Accept cookies dialog');
@@ -909,11 +922,8 @@ const Instauto = async (db, browser, options) => {
     await sleep(1000);
 
     for (;;) {
-      const loginButton = (await page.$x("//button[.//text() = 'Log In']"))[0];
-      if (loginButton) {
-        await loginButton.click();
-        break;
-      }
+      const didClickLogin = await tryClickLogin();
+      if (didClickLogin) break;
       logger.warn('Login button not found. Maybe you can help me click it? And also report an issue on github with a screenshot of what you\'re seeing :)');
       await sleep(6000);
     }
