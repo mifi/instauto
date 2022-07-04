@@ -1031,7 +1031,7 @@ const Instauto = async (db, browser, options) => {
       return followsMe === false;
     }
 
-    await safelyUnfollowUserList(allFollowingGenerator, limit, condition);
+    return safelyUnfollowUserList(allFollowingGenerator, limit, condition);
   }
 
   async function unfollowAllUnknown({ limit } = {}) {
