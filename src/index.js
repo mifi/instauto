@@ -46,6 +46,7 @@ const Instauto = async (db, browser, options) => {
     followUserMinFollowing = null,
 
     shouldFollowUser = null,
+    shouldLikeImg = null,
 
     dontUnfollowUntilTimeElapsed = 3 * 24 * 60 * 60 * 1000,
 
@@ -555,9 +556,20 @@ const Instauto = async (db, browser, options) => {
       if (!foundClickable) throw new Error('Like button not found');
 
       if (!dryRunIn) {
-        foundClickable.click();
+        const img = dialog.querySelectorAll('._aagt')[0];
+        const imageSrc = img.src;
+        const imageAlt = img.alt;
+        const imageDesc = dialog.querySelectorAll('._a9zs')[0].textContent;
 
-        window.instautoOnImageLiked(image.href);
+        console.log(image);
+
+        if (shouldLikeImg !== null && (typeof shouldLikeImg === 'function' && !shouldLikeImg({ username, imageSrc, imageAlt, imageDesc }) === true)) {
+          logger.log(`Custom follow logic returned false for ${image.href}, skipping`);
+        } else {
+          foundClickable.click();
+
+          window.instautoOnImageLiked(image.href);
+        }
       }
 
       await window.instautoSleep(3000);
