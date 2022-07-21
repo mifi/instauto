@@ -1031,7 +1031,7 @@ const Instauto = async (db, browser, options) => {
       return followsMe === false;
     }
 
-    await safelyUnfollowUserList(allFollowingGenerator, limit, condition);
+    return safelyUnfollowUserList(allFollowingGenerator, limit, condition);
   }
 
   async function unfollowAllUnknown({ limit } = {}) {
@@ -1048,7 +1048,7 @@ const Instauto = async (db, browser, options) => {
       return true;
     }
 
-    await safelyUnfollowUserList(unfollowUsersGenerator, limit, condition);
+    return safelyUnfollowUserList(unfollowUsersGenerator, limit, condition);
   }
 
   async function unfollowOldFollowed({ ageInDays, limit } = {}) {
