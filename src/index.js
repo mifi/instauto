@@ -556,10 +556,10 @@ const Instauto = async (db, browser, options) => {
       if (!foundClickable) throw new Error('Like button not found');
 
       if (!dryRunIn) {
-        const img = dialog.querySelectorAll('._aagt')[0];
+        const img = dialog.querySelector('img[srcset]');
         const imageSrc = img.src;
         const imageAlt = img.alt;
-        const imageDesc = dialog.querySelectorAll('._a9zs')[0].textContent;
+        const imageDesc = dialog.querySelector('[role=menuitem] h2 ~ div').textContent;
 
         console.log(image);
 
