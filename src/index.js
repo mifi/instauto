@@ -122,7 +122,7 @@ const Instauto = async (db, browser, options) => {
   const sleep = (ms, deviation = 1) => {
     let msWithDev = ((Math.random() * deviation) + 1) * ms;
     if (dryRun) msWithDev = Math.min(3000, msWithDev); // for dryRun, no need to wait so long
-    logger.log('Waiting', Math.round(msWithDev / 1000), 'sec');
+    logger.log('Waiting', (msWithDev / 1000).toFixed(2), 'sec');
     return new Promise(resolve => setTimeout(resolve, msWithDev));
   };
 
@@ -178,8 +178,9 @@ const Instauto = async (db, browser, options) => {
     for (let attempt = 0; ; attempt += 1) {
       logger.log(`Goto ${url}`);
       const response = await gotoUrl(url);
-      await sleep(2000);
       const status = response.status();
+      logger.log('Page loaded');
+      await sleep(2000);
 
       // https://www.reddit.com/r/Instagram/comments/kwrt0s/error_560/
       // https://github.com/mifi/instauto/issues/60
@@ -217,6 +218,7 @@ const Instauto = async (db, browser, options) => {
     }
 
     if (status === 200) {
+      // logger.log('Page returned 200 ☑️');
       // some pages return 200 but nothing there (I think deleted accounts)
       // https://github.com/mifi/SimpleInstaBot/issues/48
       // example: https://www.instagram.com/victorialarson__/
@@ -246,6 +248,8 @@ const Instauto = async (db, browser, options) => {
       await navigateToUserWithCheck(username);
       return cachedUserData;
     }
+
+    logger.log('Need to intercept network request to get user data');
 
     // intercept special XHR network request that fetches user's data and store it in a cache
     // TODO fallback to DOM to get user ID if this request fails?
