@@ -16,6 +16,15 @@ function shuffleArray(arrayIn) {
   return array;
 }
 
+// https://stackoverflow.com/questions/14822153/escape-single-quote-in-xpath-with-nokogiri
+// example str: "That's mine", he said.
+function escapeXpathStr(str) {
+  const parts = str.split("'").map((token) => `'${token}'`);
+  if (parts.length === 1) return `${parts[0]}`;
+  const str2 = parts.join(', "\'", ');
+  return `concat(${str2})`;
+}
+
 const botWorkShiftHours = 16;
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -223,8 +232,9 @@ const Instauto = async (db, browser, options) => {
       // https://github.com/mifi/SimpleInstaBot/issues/48
       // example: https://www.instagram.com/victorialarson__/
       // so we check if the page has the user's name on it
-      const foundUsernameOnPage = await page.evaluate((u) => window.find(u), username);
-      if (!foundUsernameOnPage) logger.warn(`Cannot find "${username}" on page`);
+      const elementHandles = await page.$x(`//body//main//*[contains(text(),${escapeXpathStr(username)})]`);
+      const foundUsernameOnPage = elementHandles.length > 0;
+      if (!foundUsernameOnPage) logger.warn(`Cannot find text "${username}" on page`);
       return foundUsernameOnPage;
     }
 
@@ -249,24 +259,85 @@ const Instauto = async (db, browser, options) => {
       return cachedUserData;
     }
 
-    logger.log('Need to intercept network request to get user data');
+    async function getUserDataFromPage() {
+      // https://github.com/mifi/instauto/issues/115#issuecomment-1199335650
+      // to test in browser: document.getElementsByTagName('html')[0].innerHTML.split('\n');
+      try {
+        const body = await page.content();
+        for (let q of body.split(/\r?\n/)) {
+          if (q.includes('edge_followed_by')) {
+            // eslint-disable-next-line prefer-destructuring
+            q = q.split(',[],[')[1];
+            // eslint-disable-next-line prefer-destructuring
+            q = q.split(']]]')[0];
+            q = JSON.parse(q);
+            // eslint-disable-next-line no-underscore-dangle
+            q = q.data.__bbox.result.response;
+            q = q.replace(/\\/g, '');
+            q = JSON.parse(q);
+            return q.data.user;
+          }
+        }
+      } catch (err) {
+        logger.warn('Failed to get user data from page', err);
+      }
+      return undefined;
+    }
 
     // intercept special XHR network request that fetches user's data and store it in a cache
     // TODO fallback to DOM to get user ID if this request fails?
     // https://github.com/mifi/SimpleInstaBot/issues/125#issuecomment-1145354294
-    const [foundResponse] = await Promise.all([
-      page.waitForResponse((response) => {
-        const request = response.request();
-        return request.method() === 'GET' && new RegExp(`https:\\/\\/i\\.instagram\\.com\\/api\\/v1\\/users\\/web_profile_info\\/\\?username=${encodeURIComponent(username.toLowerCase())}`).test(request.url());
-      }),
-      navigateToUserWithCheck(username),
-      // page.waitForNavigation({ waitUntil: 'networkidle0' }),
-    ]);
+    async function getUserDataFromInterceptedRequest() {
+      const t = setTimeout(async () => {
+        logger.log('Unable to intercept request, will send manually');
+        try {
+          await page.evaluate(async (username2) => {
+            const response = await window.fetch(`https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username2.toLowerCase())}`, { mode: 'cors', credentials: 'include', headers: { 'x-ig-app-id': '936619743392459' } });
+            await response.json(); // else it will not finish the request
+          }, username);
+          // todo `https://i.instagram.com/api/v1/users/${userId}/info/`
+          // https://www.javafixing.com/2022/07/fixed-can-get-instagram-profile-picture.html?m=1
+        } catch (err) {
+          logger.error('Failed to manually send request', err);
+        }
+      }, 5000);
 
-    const json = JSON.parse(await foundResponse.text());
-    const userData = json.data.user;
-    userDataCache[username] = userData;
-    return userData;
+      try {
+        const [foundResponse] = await Promise.all([
+          page.waitForResponse((response) => {
+            const request = response.request();
+            return request.method() === 'GET' && new RegExp(`https:\\/\\/i\\.instagram\\.com\\/api\\/v1\\/users\\/web_profile_info\\/\\?username=${encodeURIComponent(username.toLowerCase())}`).test(request.url());
+          }, { timeout: 30000 }),
+          navigateToUserWithCheck(username),
+          // page.waitForNavigation({ waitUntil: 'networkidle0' }),
+        ]);
+
+        const json = JSON.parse(await foundResponse.text());
+        return json.data.user;
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
+    logger.log('Trying to get user data from HTML');
+
+    await navigateToUserWithCheck(username);
+    let userData = await getUserDataFromPage();
+    if (userData) {
+      userDataCache[username] = userData;
+      return userData;
+    }
+
+    logger.log('Need to intercept network request to get user data');
+
+    // works for old accounts only:
+    userData = await getUserDataFromInterceptedRequest();
+    if (userData) {
+      userDataCache[username] = userData;
+      return userData;
+    }
+
+    return undefined;
   }
 
   async function getPageJson() {
