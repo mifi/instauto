@@ -1172,6 +1172,7 @@ const Instauto = async (db, browser, options) => {
     getPage,
     followUsersFollowers: processUsersFollowers,
     doesUserFollowMe,
+    navigateToUserAndGetData,
   };
 };
 
