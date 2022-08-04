@@ -279,7 +279,7 @@ const Instauto = async (db, browser, options) => {
           }
         }
       } catch (err) {
-        logger.warn('Failed to get user data from page', err);
+        logger.warn(`Unable to get user data from page (${err.name}) - This is normal`);
       }
       return undefined;
     }
