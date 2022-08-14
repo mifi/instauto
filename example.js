@@ -53,7 +53,7 @@ const options = {
   }, */
 
   // Custom logic filter for liking media
-  shouldLikeImg: null,
+  shouldLikeMedia: null,
 
   // NOTE: The dontUnfollowUntilTimeElapsed option is ONLY for the unfollowNonMutualFollowers function
   // This specifies the time during which the bot should not touch users that it has previously followed (in milliseconds)

@@ -46,7 +46,7 @@ const Instauto = async (db, browser, options) => {
     followUserMinFollowing = null,
 
     shouldFollowUser = null,
-    shouldLikeImg = null,
+    shouldLikeMedia = null,
 
     dontUnfollowUntilTimeElapsed = 3 * 24 * 60 * 60 * 1000,
 
@@ -556,14 +556,24 @@ const Instauto = async (db, browser, options) => {
       if (!foundClickable) throw new Error('Like button not found');
 
       if (!dryRunIn) {
-        const img = dialog.querySelector('img[srcset]');
-        const imageSrc = img.src;
-        const imageAlt = img.alt;
-        const imageDesc = dialog.querySelector('[role=menuitem] h2 ~ div').textContent;
+        const presentation = dialog.querySelector('article[role=presentation]');
+        const img = presentation.querySelector('img[alt^="Photo by "]');
+        const video = presentation.querySelector('video[type="video/mp4"]');
+        const mediaDesc = presentation.querySelector('[role=menuitem] h2 ~ div').textContent;
+        let mediaType; let imageSrc; let imageAlt; let videoPoster; let videoSrc;
+        if (img) {
+          mediaType = 'image';
+          imageSrc = img.src;
+          imageAlt = img.alt;
+        } else if (video) {
+          mediaType = 'video';
+          videoPoster = video.poster;
+          videoSrc = video.src;
+        } else {
+          logger.warn('Could not determin mediaType');
+        }
 
-        console.log(image);
-
-        if (shouldLikeImg !== null && (typeof shouldLikeImg === 'function' && !shouldLikeImg({ username, imageSrc, imageAlt, imageDesc }) === true)) {
+        if (shouldLikeMedia !== null && (typeof shouldLikeMedia === 'function' && !shouldLikeMedia({ username, mediaType, mediaDesc, imageSrc, imageAlt, videoPoster, videoSrc }) === true)) {
           logger.log(`Custom follow logic returned false for ${image.href}, skipping`);
         } else {
           foundClickable.click();
