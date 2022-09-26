@@ -496,7 +496,7 @@ const Instauto = async (db, browser, options) => {
   }
 
   /* eslint-disable no-undef */
-  async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax }) {
+  async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax, shouldLikeMedia: shouldLikeMediaIn }) {
     const allImages = Array.from(document.getElementsByTagName('a')).filter(el => /instagram.com\/p\//.test(el.href));
 
     // eslint-disable-next-line no-shadow
@@ -520,6 +520,35 @@ const Instauto = async (db, browser, options) => {
     if (images.length < 1) {
       instautoLog('No images to like');
       return;
+    }
+
+    function likeImage() {
+      if (shouldLikeMediaIn !== null && (typeof shouldLikeMediaIn === 'function')) {
+        const presentation = dialog.querySelector('article[role=presentation]');
+        const img = presentation.querySelector('img[alt^="Photo by "]');
+        const video = presentation.querySelector('video[type="video/mp4"]');
+        const mediaDesc = presentation.querySelector('[role=menuitem] h2 ~ div').textContent;
+        let mediaType; let src; let alt; let poster;
+        if (img) {
+          mediaType = 'image';
+          ({ src } = img);
+          ({ alt } = img);
+        } else if (video) {
+          mediaType = 'video';
+          ({ poster } = video);
+          ({ src } = video);
+        } else {
+          instautoLog('Could not determin mediaType');
+        }
+
+        if (!shouldLikeMediaIn({ mediaType, mediaDesc, src, alt, poster })) {
+          instautoLog(`shouldLikeMedia returned false for ${image.href}, skipping`);
+          return;
+        }
+      }
+
+      foundClickable.click();
+      window.instautoOnImageLiked(image.href);
     }
 
     for (const image of images) {
@@ -556,30 +585,7 @@ const Instauto = async (db, browser, options) => {
       if (!foundClickable) throw new Error('Like button not found');
 
       if (!dryRunIn) {
-        const presentation = dialog.querySelector('article[role=presentation]');
-        const img = presentation.querySelector('img[alt^="Photo by "]');
-        const video = presentation.querySelector('video[type="video/mp4"]');
-        const mediaDesc = presentation.querySelector('[role=menuitem] h2 ~ div').textContent;
-        let mediaType; let imageSrc; let imageAlt; let videoPoster; let videoSrc;
-        if (img) {
-          mediaType = 'image';
-          imageSrc = img.src;
-          imageAlt = img.alt;
-        } else if (video) {
-          mediaType = 'video';
-          videoPoster = video.poster;
-          videoSrc = video.src;
-        } else {
-          logger.warn('Could not determin mediaType');
-        }
-
-        if (shouldLikeMedia !== null && (typeof shouldLikeMedia === 'function' && !shouldLikeMedia({ username, mediaType, mediaDesc, imageSrc, imageAlt, videoPoster, videoSrc }) === true)) {
-          logger.log(`Custom follow logic returned false for ${image.href}, skipping`);
-        } else {
-          foundClickable.click();
-
-          window.instautoOnImageLiked(image.href);
-        }
+        likeImage();
       }
 
       await window.instautoSleep(3000);
@@ -616,7 +622,7 @@ const Instauto = async (db, browser, options) => {
       // Ignore already exists error
     }
 
-    await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax });
+    await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax, shouldLikeMedia });
   }
 
   async function followUserRespectingRestrictions({ username, skipPrivate = false }) {
