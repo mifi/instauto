@@ -55,6 +55,7 @@ const Instauto = async (db, browser, options) => {
     followUserMinFollowing = null,
 
     shouldFollowUser = null,
+    shouldLikeMedia = null,
 
     dontUnfollowUntilTimeElapsed = 3 * 24 * 60 * 60 * 1000,
 
@@ -570,7 +571,7 @@ const Instauto = async (db, browser, options) => {
   }
 
   /* eslint-disable no-undef */
-  async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax }) {
+  async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax, shouldLikeMedia: shouldLikeMediaIn }) {
     const allImages = Array.from(document.getElementsByTagName('a')).filter(el => /instagram.com\/p\//.test(el.href));
 
     // eslint-disable-next-line no-shadow
@@ -629,10 +630,40 @@ const Instauto = async (db, browser, options) => {
 
       if (!foundClickable) throw new Error('Like button not found');
 
-      if (!dryRunIn) {
-        foundClickable.click();
+      const instautoLog2 = instautoLog;
 
+      // eslint-disable-next-line no-inner-declarations
+      function likeImage() {
+        if (shouldLikeMediaIn !== null && (typeof shouldLikeMediaIn === 'function')) {
+          const presentation = dialog.querySelector('article[role=presentation]');
+          const img = presentation.querySelector('img[alt^="Photo by "]');
+          const video = presentation.querySelector('video[type="video/mp4"]');
+          const mediaDesc = presentation.querySelector('[role=menuitem] h2 ~ div').textContent;
+          let mediaType; let src; let alt; let poster;
+          if (img) {
+            mediaType = 'image';
+            ({ src } = img);
+            ({ alt } = img);
+          } else if (video) {
+            mediaType = 'video';
+            ({ poster } = video);
+            ({ src } = video);
+          } else {
+            instautoLog2('Could not determin mediaType');
+          }
+
+          if (!shouldLikeMediaIn({ mediaType, mediaDesc, src, alt, poster })) {
+            instautoLog2(`shouldLikeMedia returned false for ${image.href}, skipping`);
+            return;
+          }
+        }
+
+        foundClickable.click();
         window.instautoOnImageLiked(image.href);
+      }
+
+      if (!dryRunIn) {
+        likeImage();
       }
 
       await window.instautoSleep(3000);
@@ -669,7 +700,7 @@ const Instauto = async (db, browser, options) => {
       // Ignore already exists error
     }
 
-    await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax });
+    await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax, shouldLikeMedia });
   }
 
   async function followUserRespectingRestrictions({ username, skipPrivate = false }) {
