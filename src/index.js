@@ -522,35 +522,6 @@ const Instauto = async (db, browser, options) => {
       return;
     }
 
-    function likeImage() {
-      if (shouldLikeMediaIn !== null && (typeof shouldLikeMediaIn === 'function')) {
-        const presentation = dialog.querySelector('article[role=presentation]');
-        const img = presentation.querySelector('img[alt^="Photo by "]');
-        const video = presentation.querySelector('video[type="video/mp4"]');
-        const mediaDesc = presentation.querySelector('[role=menuitem] h2 ~ div').textContent;
-        let mediaType; let src; let alt; let poster;
-        if (img) {
-          mediaType = 'image';
-          ({ src } = img);
-          ({ alt } = img);
-        } else if (video) {
-          mediaType = 'video';
-          ({ poster } = video);
-          ({ src } = video);
-        } else {
-          instautoLog('Could not determin mediaType');
-        }
-
-        if (!shouldLikeMediaIn({ mediaType, mediaDesc, src, alt, poster })) {
-          instautoLog(`shouldLikeMedia returned false for ${image.href}, skipping`);
-          return;
-        }
-      }
-
-      foundClickable.click();
-      window.instautoOnImageLiked(image.href);
-    }
-
     for (const image of images) {
       image.click();
 
@@ -583,6 +554,38 @@ const Instauto = async (db, browser, options) => {
       const foundClickable = findClickableParent(likeButtonChild);
 
       if (!foundClickable) throw new Error('Like button not found');
+
+      const instautoLog2 = instautoLog;
+
+      // eslint-disable-next-line no-inner-declarations
+      function likeImage() {
+        if (shouldLikeMediaIn !== null && (typeof shouldLikeMediaIn === 'function')) {
+          const presentation = dialog.querySelector('article[role=presentation]');
+          const img = presentation.querySelector('img[alt^="Photo by "]');
+          const video = presentation.querySelector('video[type="video/mp4"]');
+          const mediaDesc = presentation.querySelector('[role=menuitem] h2 ~ div').textContent;
+          let mediaType; let src; let alt; let poster;
+          if (img) {
+            mediaType = 'image';
+            ({ src } = img);
+            ({ alt } = img);
+          } else if (video) {
+            mediaType = 'video';
+            ({ poster } = video);
+            ({ src } = video);
+          } else {
+            instautoLog2('Could not determin mediaType');
+          }
+
+          if (!shouldLikeMediaIn({ mediaType, mediaDesc, src, alt, poster })) {
+            instautoLog2(`shouldLikeMedia returned false for ${image.href}, skipping`);
+            return;
+          }
+        }
+
+        foundClickable.click();
+        window.instautoOnImageLiked(image.href);
+      }
 
       if (!dryRunIn) {
         likeImage();
