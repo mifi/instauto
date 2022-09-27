@@ -722,17 +722,17 @@ const Instauto = async (db, browser, options) => {
       return false;
     }
     if (
-      (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers) ||
-      (followUserMaxFollowing != null && followsCount > followUserMaxFollowing) ||
-      (followUserMinFollowers != null && followedByCount < followUserMinFollowers) ||
-      (followUserMinFollowing != null && followsCount < followUserMinFollowing)
+      (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers)
+      || (followUserMaxFollowing != null && followsCount > followUserMaxFollowing)
+      || (followUserMinFollowers != null && followedByCount < followUserMinFollowers)
+      || (followUserMinFollowing != null && followsCount < followUserMinFollowing)
     ) {
       logger.log('User has too many or too few followers or following, skipping.', 'followedByCount:', followedByCount, 'followsCount:', followsCount);
       return false;
     }
     if (
-      (followUserRatioMax != null && ratio > followUserRatioMax) ||
-      (followUserRatioMin != null && ratio < followUserRatioMin)
+      (followUserRatioMax != null && ratio > followUserRatioMax)
+      || (followUserRatioMin != null && ratio < followUserRatioMin)
     ) {
       logger.log('User has too many followers compared to follows or opposite, skipping');
       return false;
@@ -1168,9 +1168,9 @@ const Instauto = async (db, browser, options) => {
     });
 
     function condition(username) {
-      return getPrevFollowedUser(username) &&
-        !excludeUsers.includes(username) &&
-        (new Date().getTime() - getPrevFollowedUser(username).time) / (1000 * 60 * 60 * 24) > ageInDays;
+      return getPrevFollowedUser(username)
+        && !excludeUsers.includes(username)
+        && (new Date().getTime() - getPrevFollowedUser(username).time) / (1000 * 60 * 60 * 24) > ageInDays;
     }
 
     return safelyUnfollowUserList(followingUsersGenerator, limit, condition);
@@ -1182,8 +1182,7 @@ const Instauto = async (db, browser, options) => {
       getFollowers: false,
     });
 
-    return allFollowing.filter(u =>
-      !getPrevFollowedUser(u) && !excludeUsers.includes(u));
+    return allFollowing.filter(u => !getPrevFollowedUser(u) && !excludeUsers.includes(u));
   }
 
   return {
