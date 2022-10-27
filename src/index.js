@@ -129,11 +129,13 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
+  const sleepFixed = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
   const sleep = (ms, deviation = 1) => {
     let msWithDev = ((Math.random() * deviation) + 1) * ms;
     if (dryRun) msWithDev = Math.min(3000, msWithDev); // for dryRun, no need to wait so long
     logger.log('Waiting', (msWithDev / 1000).toFixed(2), 'sec');
-    return new Promise(resolve => setTimeout(resolve, msWithDev));
+    return sleepFixed(msWithDev);
   };
 
   async function onImageLiked({ username, href }) {
@@ -413,7 +415,11 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function findUnfollowConfirmButton() {
-    const elementHandles = await page.$x("//button[text()='Unfollow']");
+    let elementHandles = await page.$x("//button[text()='Unfollow']");
+    if (elementHandles.length > 0) return elementHandles[0];
+
+    // https://github.com/mifi/SimpleInstaBot/issues/191
+    elementHandles = await page.$x("//*[@role='button'][contains(.,'Unfollow')]");
     return elementHandles[0];
   }
 
@@ -1034,7 +1040,7 @@ const Instauto = async (db, browser, options) => {
       await sleep(6000);
     }
 
-    await sleep(6000);
+    await sleepFixed(10000);
 
     // Sometimes login button gets stuck with a spinner
     // https://github.com/mifi/SimpleInstaBot/issues/25
