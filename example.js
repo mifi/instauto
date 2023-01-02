@@ -81,8 +81,6 @@ const options = {
       // args: ['--proxy-server=127.0.0.1:9876'],
     });
 
-    });
-
     // Create a database where state will be loaded/saved to
     const instautoDb = await Instauto.JSONDB({
       // Will store a list of all users that have been followed before, to prevent future re-following.
