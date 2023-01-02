@@ -74,7 +74,14 @@ const options = {
   let browser;
 
   try {
-    browser = await puppeteer.launch({ headless: false });
+    browser = await puppeteer.launch({
+      // set headless: false first if you need to debug and see how it works
+      headless: false,
+      // If you need to proxy: (see also https://www.chromium.org/developers/design-documents/network-settings)
+      // args: ['--proxy-server=127.0.0.1:9876'],
+    });
+
+    });
 
     // Create a database where state will be loaded/saved to
     const instautoDb = await Instauto.JSONDB({
