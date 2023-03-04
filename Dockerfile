@@ -11,5 +11,4 @@ RUN npm install --save instauto
 
 COPY . /app/instauto
 
-#CMD ["npm", "i", "-g", "yarn"]
-CMD ["yarn", "upgrade", "puppeteer:latest",  "instauto"]
+CMD ["yarn"]
