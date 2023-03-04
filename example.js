@@ -76,9 +76,7 @@ const options = {
     if (unfollowedCount > 0) await instauto.sleep(10 * 60 * 1000);
 
     // List of usernames that we should follow the followers of, can be celebrities etc.
-    const usersToFollowFollowersOf = process.env.USERS_TO_FOLLOW.length === 1 ?
-        process.env.USERS_TO_FOLLOW :
-        process.env.USERS_TO_FOLLOW.split(',');
+    const usersToFollowFollowersOf = process.env.USERS_TO_FOLLOW != null ? process.env.USERS_TO_FOLLOW.split(',') : [];
 
     // Now go through each of these and follow a certain amount of their followers
     await instauto.followUsersFollowers({
