@@ -78,6 +78,14 @@ pm2 startup
 
 Now it will run automatically on reboot! 🙌
 
+## Running in Docker
+
+We've added a Docker support for instauto! In the **environment** section of your `docker-compose.yml` you need to specify your configuration for login and performance. If you want to raise another container, just copy the service with diff name and run the compose. You'll need to specify different ports.
+
+```bash
+docker-compose --profile instauto up -d
+```
+
 ## Donate 🙈
 
 This project is maintained by me alone. The project will always remain free and open source, but if it's useful for you, consider supporting me. :) It will give me extra motivation to improve it.
@@ -87,6 +95,7 @@ This project is maintained by me alone. The project will always remain free and 
 ## Credits
 
 - Icons made by [smalllikeart](https://www.flaticon.com/authors/smalllikeart) & [Freepik](https://www.flaticon.com/authors/freepik) from [www.flaticon.com](https://www.flaticon.com/)
+- Docker compose by https://github.com/maxxxdj
 
 ---
 
