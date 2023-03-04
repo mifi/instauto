@@ -77,7 +77,7 @@ const options = {
     browser = await puppeteer.launch({
       // set headless: false first if you need to debug and see how it works
       headless: true,
-      
+
       args: [
         // Needed for docker
         '--no-sandbox',
