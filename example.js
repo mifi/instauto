@@ -4,6 +4,10 @@ const puppeteer = require('puppeteer'); // eslint-disable-line import/no-extrane
 
 const Instauto = require('instauto'); // eslint-disable-line import/no-unresolved
 
+// Optional: Custom logger with timestamps
+const log = (fn, ...args) => console[fn](new Date().toISOString(), ...args);
+const logger = Object.fromEntries(['log', 'info', 'debug', 'error', 'trace', 'warn'].map((fn) => [fn, (...args) => log(fn, ...args)]));
+
 const options = {
   cookiesPath: './cookies.json',
 
@@ -31,6 +35,26 @@ const options = {
   // Don't follow users who have more people following them than this:
   followUserMinFollowing: null,
 
+  // Custom logic filter for user follow
+  shouldFollowUser: null,
+  /* Example to skip bussiness accounts
+  shouldFollowUser: function (data) {
+    console.log('isBusinessAccount:', data.isBusinessAccount);
+    return !data.isBusinessAccount;
+  }, */
+  /* Example to skip accounts with 'crypto' & 'bitcoin' in their bio or username
+  shouldFollowUser: function (data) {
+    console.log('username:', data.username, 'biography:', data.biography);
+    var keywords = ['crypto', 'bitcoin'];
+    if (keywords.find(v => data.username.includes(v)) !== undefined || keywords.find(v => data.biography.includes(v)) !== undefined) {
+      return false;
+    }
+    return true;
+  }, */
+
+  // Custom logic filter for liking media
+  shouldLikeMedia: null,
+
   // NOTE: The dontUnfollowUntilTimeElapsed option is ONLY for the unfollowNonMutualFollowers function
   // This specifies the time during which the bot should not touch users that it has previously followed (in milliseconds)
   // After this time has passed, it will be able to unfollow them again.
@@ -42,6 +66,8 @@ const options = {
 
   // If true, will not do any actions (defaults to true)
   dryRun: false,
+
+  logger,
 };
 
 (async () => {
@@ -49,7 +75,7 @@ const options = {
 
   try {
     browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox','--disable-setuid-sandbox'] });
-
+    
     // Create a database where state will be loaded/saved to
     const instautoDb = await Instauto.JSONDB({
       // Will store a list of all users that have been followed before, to prevent future re-following.

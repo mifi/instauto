@@ -1,14 +1,16 @@
 ![](logo.png)
 
-instauto is an Instagram automation/bot library written in modern, clean javascript using Google's Puppeteer. Goal is to be very easy to set up, use, and extend, and obey instagram's limits. Heavily inspired by [InstaPy](https://github.com/timgrossmann/InstaPy), but I thought it was way too heavy and hard to setup.
+[![Discord](https://img.shields.io/discord/986052713425027072)](https://discord.gg/Rh3KT9zyhj) [![PayPal](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://paypal.me/mifino/usd)
 
-**NEW! 🎉**
-Now there is a GUI application for those who don't want to code: [SimpleInstaBot](https://mifi.github.io/SimpleInstaBot/)
+instauto is an Instagram automation/bot library (API) written in modern, clean javascript using Google's Puppeteer. Goal is to be very easy to set up, use, and extend, and obey instagram's limits. Heavily inspired by [InstaPy](https://github.com/timgrossmann/InstaPy), but I thought it was way too heavy and hard to setup.
+
+There is also a GUI application for those who don't want to code: [SimpleInstaBot](https://mifi.github.io/SimpleInstaBot/)
 
 
 ## Setup
 
 - First install [Node.js](https://nodejs.org/en/) 8 or newer.
+  - On MacOS, it's recommended to use [homebrew](https://brew.sh/): `brew install node`
 
 - Create a new directory with a file like [example.js](https://github.com/mifi/instauto/blob/master/example.js)
 
@@ -24,7 +26,7 @@ Now there is a GUI application for those who don't want to code: [SimpleInstaBot
 
 You can run this code for example once every day using cron or pm2 or similar
 
-See [index.js](https://github.com/mifi/instauto/blob/master/index.js) for available options.
+See [index.js](https://github.com/mifi/instauto/blob/master/src/index.js) for available options.
 
 ## Supported functionality
 
