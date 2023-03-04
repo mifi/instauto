@@ -5,10 +5,6 @@ RUN apt-get install -y gconf-service libasound2 libatk1.0-0 libc6 libcairo2 libc
 
 WORKDIR /app/instauto
 
-COPY package.json /app/instauto
-
-RUN yarn add instauto
-
 COPY . /app/instauto
 
 CMD ["yarn", "upgrade", "puppeteer:latest",  "instauto"]
