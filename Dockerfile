@@ -7,4 +7,4 @@ WORKDIR /app/instauto
 
 COPY . /app/instauto
 
-CMD ["yarn", "upgrade", "puppeteer:latest",  "instauto"]
+CMD ["yarn"]
