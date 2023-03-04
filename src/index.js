@@ -16,6 +16,15 @@ function shuffleArray(arrayIn) {
   return array;
 }
 
+// https://stackoverflow.com/questions/14822153/escape-single-quote-in-xpath-with-nokogiri
+// example str: "That's mine", he said.
+function escapeXpathStr(str) {
+  const parts = str.split("'").map((token) => `'${token}'`);
+  if (parts.length === 1) return `${parts[0]}`;
+  const str2 = parts.join(', "\'", ');
+  return `concat(${str2})`;
+}
+
 const botWorkShiftHours = 16;
 
 const dayMs = 24 * 60 * 60 * 1000;
@@ -45,6 +54,9 @@ const Instauto = async (db, browser, options) => {
     followUserMinFollowers = null,
     followUserMinFollowing = null,
 
+    shouldFollowUser = null,
+    shouldLikeMedia = null,
+
     dontUnfollowUntilTimeElapsed = 3 * 24 * 60 * 60 * 1000,
 
     excludeUsers = [],
@@ -58,6 +70,7 @@ const Instauto = async (db, browser, options) => {
   } = options;
 
   let myUsername = myUsernameIn;
+  const userDataCache = {};
 
   assert(cookiesPath);
   assert(db);
@@ -73,7 +86,6 @@ const Instauto = async (db, browser, options) => {
 
   // State
   let page;
-  let graphqlUserMissing = false;
 
   async function takeScreenshot() {
     if (!screenshotOnError) return;
@@ -117,11 +129,13 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
+  const sleepFixed = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
   const sleep = (ms, deviation = 1) => {
     let msWithDev = ((Math.random() * deviation) + 1) * ms;
     if (dryRun) msWithDev = Math.min(3000, msWithDev); // for dryRun, no need to wait so long
-    logger.log('Waiting', Math.round(msWithDev / 1000), 'sec');
-    return new Promise(resolve => setTimeout(resolve, msWithDev));
+    logger.log('Waiting', (msWithDev / 1000).toFixed(2), 'sec');
+    return sleepFixed(msWithDev);
   };
 
   async function onImageLiked({ username, href }) {
@@ -136,17 +150,22 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function checkReachedFollowedUserDayLimit() {
-    const reachedFollowedUserDayLimit = getNumFollowedUsersThisTimeUnit(dayMs) >= maxFollowsPerDay;
-    if (reachedFollowedUserDayLimit) {
+    if (getNumFollowedUsersThisTimeUnit(dayMs) >= maxFollowsPerDay) {
       logger.log('Have reached daily follow/unfollow limit, waiting 10 min');
       await sleep(10 * 60 * 1000);
     }
   }
 
   async function checkReachedFollowedUserHourLimit() {
-    const hasReachedFollowedUserHourLimit = getNumFollowedUsersThisTimeUnit(hourMs) >= maxFollowsPerHour;
-    if (hasReachedFollowedUserHourLimit) {
+    if (getNumFollowedUsersThisTimeUnit(hourMs) >= maxFollowsPerHour) {
       logger.log('Have reached hourly follow rate limit, pausing 10 min');
+      await sleep(10 * 60 * 1000);
+    }
+  }
+
+  async function checkReachedLikedUserDayLimit() {
+    if (getNumLikesThisTimeUnit(dayMs) >= maxLikesPerDay) {
+      logger.log('Have reached daily like rate limit, pausing 10 min');
       await sleep(10 * 60 * 1000);
     }
   }
@@ -154,10 +173,7 @@ const Instauto = async (db, browser, options) => {
   async function throttle() {
     await checkReachedFollowedUserDayLimit();
     await checkReachedFollowedUserHourLimit();
-  }
-
-  function hasReachedDailyLikesLimit() {
-    return getNumLikesThisTimeUnit(dayMs) >= maxLikesPerDay;
+    await checkReachedLikedUserDayLimit();
   }
 
   function haveRecentlyFollowedUser(username) {
@@ -166,16 +182,25 @@ const Instauto = async (db, browser, options) => {
     return new Date().getTime() - followedUserEntry.time < dontUnfollowUntilTimeElapsed;
   }
 
+  // See https://github.com/mifi/SimpleInstaBot/issues/140#issuecomment-1149105387
+  const gotoUrl = async (url) => page.goto(url, { waitUntil: ['load', 'domcontentloaded', 'networkidle0'] });
+
   async function gotoWithRetry(url) {
+    const maxAttempts = 3;
     for (let attempt = 0; ; attempt += 1) {
       logger.log(`Goto ${url}`);
-      const response = await page.goto(url);
-      await sleep(1000);
+      const response = await gotoUrl(url);
       const status = response.status();
+      logger.log('Page loaded');
+      await sleep(2000);
 
       // https://www.reddit.com/r/Instagram/comments/kwrt0s/error_560/
       // https://github.com/mifi/instauto/issues/60
-      if (![560, 429].includes(status) || attempt > 3) return status;
+      if (![560, 429].includes(status)) return status;
+
+      if (attempt > maxAttempts) {
+        throw new Error(`Navigate to user failed after ${maxAttempts} attempts, last status: ${status}`);
+      }
 
       logger.info(`Got ${status} - Retrying request later...`);
       if (status === 429) logger.warn('429 Too Many Requests could mean that Instagram suspects you\'re using a bot. You could try to use the Instagram Mobile app from the same IP for a few days first');
@@ -183,73 +208,143 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
-  async function safeGotoUser(url, checkPageForUsername) {
-    const status = await gotoWithRetry(url);
-    if (status === 200) {
-      if (checkPageForUsername != null) {
-        // some pages return 200 but nothing there (I think deleted accounts)
-        // https://github.com/mifi/SimpleInstaBot/issues/48
-        // example: https://www.instagram.com/victorialarson__/
-        // so we check if the page has the user's name on it
-        return page.evaluate((username) => window.find(username), checkPageForUsername);
-      }
-      return true;
-    }
-    if (status === 404) {
-      logger.log('User not found');
-      return false;
-    }
-    throw new Error(`Navigate to user failed with status ${status}`);
+  const getUserPageUrl = (username) => `${instagramBaseUrl}/${encodeURIComponent(username)}`;
+
+  function isAlreadyOnUserPage(username) {
+    const url = getUserPageUrl(username);
+    // optimization: already on URL? (ignore trailing slash)
+    return (page.url().replace(/\/$/, '') === url.replace(/\/$/, ''));
   }
 
   async function navigateToUser(username) {
-    const url = `${instagramBaseUrl}/${encodeURIComponent(username)}`;
-    if (page.url().replace(/\/$/, '') === url.replace(/\/$/, '')) return true; // optimization: already on URL? (ignore trailing slash)
+    if (isAlreadyOnUserPage(username)) return true;
+
     // logger.log('navigating from', page.url(), 'to', url);
     logger.log(`Navigating to user ${username}`);
-    return safeGotoUser(url, username);
+
+    const url = getUserPageUrl(username);
+    const status = await gotoWithRetry(url);
+    if (status === 404) {
+      logger.warn('User page returned 404');
+      return false;
+    }
+
+    if (status === 200) {
+      // logger.log('Page returned 200 ☑️');
+      // some pages return 200 but nothing there (I think deleted accounts)
+      // https://github.com/mifi/SimpleInstaBot/issues/48
+      // example: https://www.instagram.com/victorialarson__/
+      // so we check if the page has the user's name on it
+      const elementHandles = await page.$x(`//body//main//*[contains(text(),${escapeXpathStr(username)})]`);
+      const foundUsernameOnPage = elementHandles.length > 0;
+      if (!foundUsernameOnPage) logger.warn(`Cannot find text "${username}" on page`);
+      return foundUsernameOnPage;
+    }
+
+    throw new Error(`Navigate to user failed with status ${status}`);
   }
 
   async function navigateToUserWithCheck(username) {
     if (!(await navigateToUser(username))) throw new Error('User not found');
   }
 
-  async function getPageJson() {
-    return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
-  }
-
   async function navigateToUserAndGetData(username) {
-    // https://github.com/mifi/SimpleInstaBot/issues/36
-    if (graphqlUserMissing) {
-      // https://stackoverflow.com/questions/37593025/instagram-api-get-the-userid
-      // https://stackoverflow.com/questions/17373886/how-can-i-get-a-users-media-from-instagram-without-authenticating-as-a-user
-      const found = await safeGotoUser(`${instagramBaseUrl}/${encodeURIComponent(username)}?__a=1`);
-      if (!found) throw new Error('User not found');
+    const cachedUserData = userDataCache[username];
 
-      const json = await getPageJson();
-
-      const { user } = json.graphql;
-
-      await navigateToUserWithCheck(username);
-      return user;
+    if (isAlreadyOnUserPage(username)) {
+      // assume we have data
+      return cachedUserData;
     }
+
+    if (cachedUserData != null) {
+      // if we already have userData, just navigate
+      await navigateToUserWithCheck(username);
+      return cachedUserData;
+    }
+
+    async function getUserDataFromPage() {
+      // https://github.com/mifi/instauto/issues/115#issuecomment-1199335650
+      // to test in browser: document.getElementsByTagName('html')[0].innerHTML.split('\n');
+      try {
+        const body = await page.content();
+        for (let q of body.split(/\r?\n/)) {
+          if (q.includes('edge_followed_by')) {
+            // eslint-disable-next-line prefer-destructuring
+            q = q.split(',[],[')[1];
+            // eslint-disable-next-line prefer-destructuring
+            q = q.split(']]]')[0];
+            q = JSON.parse(q);
+            // eslint-disable-next-line no-underscore-dangle
+            q = q.data.__bbox.result.response;
+            q = q.replace(/\\/g, '');
+            q = JSON.parse(q);
+            return q.data.user;
+          }
+        }
+      } catch (err) {
+        logger.warn(`Unable to get user data from page (${err.name}) - This is normal`);
+      }
+      return undefined;
+    }
+
+    // intercept special XHR network request that fetches user's data and store it in a cache
+    // TODO fallback to DOM to get user ID if this request fails?
+    // https://github.com/mifi/SimpleInstaBot/issues/125#issuecomment-1145354294
+    async function getUserDataFromInterceptedRequest() {
+      const t = setTimeout(async () => {
+        logger.log('Unable to intercept request, will send manually');
+        try {
+          await page.evaluate(async (username2) => {
+            const response = await window.fetch(`https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username2.toLowerCase())}`, { mode: 'cors', credentials: 'include', headers: { 'x-ig-app-id': '936619743392459' } });
+            await response.json(); // else it will not finish the request
+          }, username);
+          // todo `https://i.instagram.com/api/v1/users/${userId}/info/`
+          // https://www.javafixing.com/2022/07/fixed-can-get-instagram-profile-picture.html?m=1
+        } catch (err) {
+          logger.error('Failed to manually send request', err);
+        }
+      }, 5000);
+
+      try {
+        const [foundResponse] = await Promise.all([
+          page.waitForResponse((response) => {
+            const request = response.request();
+            return request.method() === 'GET' && new RegExp(`https:\\/\\/i\\.instagram\\.com\\/api\\/v1\\/users\\/web_profile_info\\/\\?username=${encodeURIComponent(username.toLowerCase())}`).test(request.url());
+          }, { timeout: 30000 }),
+          navigateToUserWithCheck(username),
+          // page.waitForNavigation({ waitUntil: 'networkidle0' }),
+        ]);
+
+        const json = JSON.parse(await foundResponse.text());
+        return json.data.user;
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
+    logger.log('Trying to get user data from HTML');
 
     await navigateToUserWithCheck(username);
-
-    // eslint-disable-next-line no-underscore-dangle
-    const sharedData = await page.evaluate(() => window._sharedData);
-    try {
-      // eslint-disable-next-line prefer-destructuring
-      return sharedData.entry_data.ProfilePage[0].graphql.user;
-
-      // JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window.__additionalDataLoaded(\'feed\',')).innerHTML.replace(/^window.__additionalDataLoaded\('feed',({.*})\);$/, '$1'));
-      // JSON.parse(Array.from(document.getElementsByTagName('script')).find(el => el.innerHTML.startsWith('window._sharedData')).innerHTML.replace(/^window._sharedData ?= ?({.*});$/, '$1'));
-      // Array.from(document.getElementsByTagName('a')).find(el => el.attributes?.href?.value.includes(`${username}/followers`)).innerText
-    } catch (err) {
-      logger.warn('Missing graphql in page, falling back to alternative method...');
-      graphqlUserMissing = true; // Store as state so we don't have to do this every time from now on.
-      return navigateToUserAndGetData(username); // Now try again with alternative method
+    let userData = await getUserDataFromPage();
+    if (userData) {
+      userDataCache[username] = userData;
+      return userData;
     }
+
+    logger.log('Need to intercept network request to get user data');
+
+    // works for old accounts only:
+    userData = await getUserDataFromInterceptedRequest();
+    if (userData) {
+      userDataCache[username] = userData;
+      return userData;
+    }
+
+    return undefined;
+  }
+
+  async function getPageJson() {
+    return JSON.parse(await (await (await page.$('pre')).getProperty('textContent')).jsonValue());
   }
 
   async function isActionBlocked() {
@@ -298,25 +393,38 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function findUnfollowButton() {
-    const elementHandles = await page.$x("//header//button[text()='Following']");
+    let button = await findButtonWithText('Following');
+    if (button) return button;
+
+    button = await findButtonWithText('Requested');
+    if (button) return button;
+
+    let elementHandles = await page.$x("//header//button[*//span[@aria-label='Following']]");
     if (elementHandles.length > 0) return elementHandles[0];
 
-    const elementHandles2 = await page.$x("//header//button[text()='Requested']");
-    if (elementHandles2.length > 0) return elementHandles2[0];
+    elementHandles = await page.$x("//header//button[*//span[@aria-label='Requested']]");
+    if (elementHandles.length > 0) return elementHandles[0];
 
-    const elementHandles3 = await page.$x("//header//button[*//span[@aria-label='Following']]");
-    if (elementHandles3.length > 0) return elementHandles3[0];
+    elementHandles = await page.$x("//header//button[*//*[name()='svg'][@aria-label='Following']]");
+    if (elementHandles.length > 0) return elementHandles[0];
+
+    elementHandles = await page.$x("//header//button[*//*[name()='svg'][@aria-label='Requested']]");
+    if (elementHandles.length > 0) return elementHandles[0];
 
     return undefined;
   }
 
   async function findUnfollowConfirmButton() {
-    const elementHandles = await page.$x("//button[text()='Unfollow']");
+    let elementHandles = await page.$x("//button[text()='Unfollow']");
+    if (elementHandles.length > 0) return elementHandles[0];
+
+    // https://github.com/mifi/SimpleInstaBot/issues/191
+    elementHandles = await page.$x("//*[@role='button'][contains(.,'Unfollow')]");
     return elementHandles[0];
   }
 
   async function followUser(username) {
-    await navigateToUserWithCheck(username);
+    await navigateToUserAndGetData(username);
     const elementHandle = await findFollowButton();
 
     if (!elementHandle) {
@@ -358,7 +466,7 @@ const Instauto = async (db, browser, options) => {
   // See https://github.com/timgrossmann/InstaPy/pull/2345
   // https://github.com/timgrossmann/InstaPy/issues/2355
   async function unfollowUser(username) {
-    await navigateToUserWithCheck(username);
+    await navigateToUserAndGetData(username);
     logger.log(`Unfollowing user ${username}`);
 
     const res = { username, time: new Date().getTime() };
@@ -469,7 +577,7 @@ const Instauto = async (db, browser, options) => {
   }
 
   /* eslint-disable no-undef */
-  async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax }) {
+  async function likeCurrentUserImagesPageCode({ dryRun: dryRunIn, likeImagesMin, likeImagesMax, shouldLikeMedia: shouldLikeMediaIn }) {
     const allImages = Array.from(document.getElementsByTagName('a')).filter(el => /instagram.com\/p\//.test(el.href));
 
     // eslint-disable-next-line no-shadow
@@ -528,15 +636,45 @@ const Instauto = async (db, browser, options) => {
 
       if (!foundClickable) throw new Error('Like button not found');
 
-      if (!dryRunIn) {
-        foundClickable.click();
+      const instautoLog2 = instautoLog;
 
+      // eslint-disable-next-line no-inner-declarations
+      function likeImage() {
+        if (shouldLikeMediaIn !== null && (typeof shouldLikeMediaIn === 'function')) {
+          const presentation = dialog.querySelector('article[role=presentation]');
+          const img = presentation.querySelector('img[alt^="Photo by "]');
+          const video = presentation.querySelector('video[type="video/mp4"]');
+          const mediaDesc = presentation.querySelector('[role=menuitem] h2 ~ div').textContent;
+          let mediaType; let src; let alt; let poster;
+          if (img) {
+            mediaType = 'image';
+            ({ src } = img);
+            ({ alt } = img);
+          } else if (video) {
+            mediaType = 'video';
+            ({ poster } = video);
+            ({ src } = video);
+          } else {
+            instautoLog2('Could not determin mediaType');
+          }
+
+          if (!shouldLikeMediaIn({ mediaType, mediaDesc, src, alt, poster })) {
+            instautoLog2(`shouldLikeMedia returned false for ${image.href}, skipping`);
+            return;
+          }
+        }
+
+        foundClickable.click();
         window.instautoOnImageLiked(image.href);
+      }
+
+      if (!dryRunIn) {
+        likeImage();
       }
 
       await window.instautoSleep(3000);
 
-      const closeButtonChild = document.querySelector('button [aria-label=Close]');
+      const closeButtonChild = document.querySelector('svg[aria-label="Close"]');
 
       if (!closeButtonChild) throw new Error('Close button not found (aria-label)');
 
@@ -557,7 +695,7 @@ const Instauto = async (db, browser, options) => {
   async function likeUserImages({ username, likeImagesMin, likeImagesMax } = {}) {
     if (!likeImagesMin || !likeImagesMax || likeImagesMax < likeImagesMin || likeImagesMin < 1) throw new Error('Invalid arguments');
 
-    await navigateToUserWithCheck(username);
+    await navigateToUserAndGetData(username);
 
     logger.log(`Liking ${likeImagesMin}-${likeImagesMax} user images`);
     try {
@@ -568,104 +706,120 @@ const Instauto = async (db, browser, options) => {
       // Ignore already exists error
     }
 
-    await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax });
+    await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax, shouldLikeMedia });
   }
 
-  async function followUserFollowers(username, {
+  async function followUserRespectingRestrictions({ username, skipPrivate = false }) {
+    if (getPrevFollowedUser(username)) {
+      logger.log('Skipping already followed user', username);
+      return false;
+    }
+
+    const graphqlUser = await navigateToUserAndGetData(username);
+
+    const { edge_followed_by: { count: followedByCount }, edge_follow: { count: followsCount }, is_private: isPrivate, is_verified: isVerified, is_business_account: isBusinessAccount, is_professional_account: isProfessionalAccount, full_name: fullName, biography, profile_pic_url_hd: profilePicUrlHd, external_url: externalUrl, business_category_name: businessCategoryName, category_name: categoryName } = graphqlUser;
+
+    // logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
+
+    const ratio = followedByCount / (followsCount || 1);
+
+    if (isPrivate && skipPrivate) {
+      logger.log('User is private, skipping');
+      return false;
+    }
+    if (
+      (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers)
+      || (followUserMaxFollowing != null && followsCount > followUserMaxFollowing)
+      || (followUserMinFollowers != null && followedByCount < followUserMinFollowers)
+      || (followUserMinFollowing != null && followsCount < followUserMinFollowing)
+    ) {
+      logger.log('User has too many or too few followers or following, skipping.', 'followedByCount:', followedByCount, 'followsCount:', followsCount);
+      return false;
+    }
+    if (
+      (followUserRatioMax != null && ratio > followUserRatioMax)
+      || (followUserRatioMin != null && ratio < followUserRatioMin)
+    ) {
+      logger.log('User has too many followers compared to follows or opposite, skipping');
+      return false;
+    }
+    if (shouldFollowUser !== null && (typeof shouldFollowUser === 'function' && !shouldFollowUser({ username, isVerified, isBusinessAccount, isProfessionalAccount, fullName, biography, profilePicUrlHd, externalUrl, businessCategoryName, categoryName }) === true)) {
+      logger.log(`Custom follow logic returned false for ${username}, skipping`);
+      return false;
+    }
+
+    await followUser(username);
+
+    await sleep(30000);
+    await throttle();
+
+    return true;
+  }
+
+  async function processUserFollowers(username, {
     maxFollowsPerUser = 5, skipPrivate = false, enableLikeImages, likeImagesMin, likeImagesMax,
   } = {}) {
-    logger.log(`Following up to ${maxFollowsPerUser} followers of ${username}`);
+    const enableFollow = maxFollowsPerUser > 0;
+
+    if (enableFollow) logger.log(`Following up to ${maxFollowsPerUser} followers of ${username}`);
+    if (enableLikeImages) logger.log(`Liking images of up to ${likeImagesMax} followers of ${username}`);
 
     await throttle();
 
     let numFollowedForThisUser = 0;
 
-    const userData = await navigateToUserAndGetData(username);
+    const { id: userId } = await navigateToUserAndGetData(username);
 
-    for await (const followersBatch of getFollowersOrFollowingGenerator({ userId: userData.id, getFollowers: true })) {
+    for await (const followersBatch of getFollowersOrFollowingGenerator({ userId, getFollowers: true })) {
       logger.log('User followers batch', followersBatch);
 
       for (const follower of followersBatch) {
-        if (getPrevFollowedUser(follower)) {
-          logger.log('Skipping already followed user', follower);
-        } else {
-          try {
-            if (numFollowedForThisUser >= maxFollowsPerUser) {
-              logger.log('Have reached followed limit for this user, stopping');
-              return;
-            }
+        await throttle();
 
-            const graphqlUser = await navigateToUserAndGetData(follower);
-
-            const followedByCount = graphqlUser.edge_followed_by.count;
-            const followsCount = graphqlUser.edge_follow.count;
-            const isPrivate = graphqlUser.is_private;
-
-            // logger.log('followedByCount:', followedByCount, 'followsCount:', followsCount);
-
-            const ratio = followedByCount / (followsCount || 1);
-
-            if (isPrivate && skipPrivate) {
-              logger.log('User is private, skipping');
-            } else if (
-              (followUserMaxFollowers != null && followedByCount > followUserMaxFollowers) ||
-              (followUserMaxFollowing != null && followsCount > followUserMaxFollowing) ||
-              (followUserMinFollowers != null && followedByCount < followUserMinFollowers) ||
-              (followUserMinFollowing != null && followsCount < followUserMinFollowing)
-            ) {
-              logger.log('User has too many or too few followers or following, skipping.', 'followedByCount:', followedByCount, 'followsCount:', followsCount);
-            } else if (
-              (followUserRatioMax != null && ratio > followUserRatioMax) ||
-              (followUserRatioMin != null && ratio < followUserRatioMin)
-            ) {
-              logger.log('User has too many followers compared to follows or opposite, skipping');
-            } else {
-              await followUser(follower);
-              numFollowedForThisUser += 1;
-
-              await sleep(10000);
-
-              if (!isPrivate && enableLikeImages && !hasReachedDailyLikesLimit()) {
-                try {
-                  await likeUserImages({ username: follower, likeImagesMin, likeImagesMax });
-                } catch (err) {
-                  logger.error(`Failed to follow user's images ${follower}`, err);
-                  await takeScreenshot();
-                }
-              }
-
-              await sleep(20000);
-              await throttle();
-            }
-          } catch (err) {
-            logger.error(`Failed to process follower ${follower}`, err);
-            await sleep(20000);
+        try {
+          if (enableFollow && numFollowedForThisUser >= maxFollowsPerUser) {
+            logger.log('Have reached followed limit for this user, stopping');
+            return;
           }
+
+          let didActuallyFollow = false;
+          if (enableFollow) didActuallyFollow = await followUserRespectingRestrictions({ username: follower, skipPrivate });
+          if (didActuallyFollow) numFollowedForThisUser += 1;
+
+          const didFailToFollow = enableFollow && !didActuallyFollow;
+
+          if (enableLikeImages && !didFailToFollow) {
+            // Note: throws error if user isPrivate
+            await likeUserImages({ username: follower, likeImagesMin, likeImagesMax });
+          }
+        } catch (err) {
+          logger.error(`Failed to process follower ${follower}`, err);
+          await takeScreenshot();
+          await sleep(20000);
         }
       }
     }
   }
 
-  async function followUsersFollowers({ usersToFollowFollowersOf, maxFollowsTotal = 150, skipPrivate, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
-    if (!maxFollowsTotal || maxFollowsTotal <= 2) {
-      throw new Error(`Invalid parameter maxFollowsTotal ${maxFollowsTotal}`);
-    }
-
-
+  async function processUsersFollowers({ usersToFollowFollowersOf, maxFollowsTotal = 150, skipPrivate, enableFollow = true, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
     // If maxFollowsTotal turns out to be lower than the user list size, slice off the user list
     const usersToFollowFollowersOfSliced = shuffleArray(usersToFollowFollowersOf).slice(0, maxFollowsTotal);
 
-    // Round up or we risk following none
-    const maxFollowsPerUser = Math.floor(maxFollowsTotal / usersToFollowFollowersOfSliced.length) + 1;
+    const maxFollowsPerUser = enableFollow && usersToFollowFollowersOfSliced.length > 0 ? Math.floor(maxFollowsTotal / usersToFollowFollowersOfSliced.length) : 0;
+
+    if (maxFollowsPerUser === 0 && (!enableLikeImages || likeImagesMin < 1 || likeImagesMax < 1)) {
+      logger.warn('Nothing to follow or like');
+      return;
+    }
 
     for (const username of usersToFollowFollowersOfSliced) {
       try {
-        await followUserFollowers(username, { maxFollowsPerUser, skipPrivate, enableLikeImages, likeImagesMin, likeImagesMax });
+        await processUserFollowers(username, { maxFollowsPerUser, skipPrivate, enableLikeImages, likeImagesMin, likeImagesMax });
 
         await sleep(10 * 60 * 1000);
         await throttle();
       } catch (err) {
-        console.error('Failed to follow user followers, continuing', err);
+        logger.error('Failed to process user followers, continuing', username, err);
         await takeScreenshot();
         await sleep(60 * 1000);
       }
@@ -688,6 +842,8 @@ const Instauto = async (db, browser, options) => {
             const userFound = await navigateToUser(username);
 
             if (!userFound) {
+              // to avoid repeatedly unfollowing failed users, flag them as already unfollowed
+              logger.log('User not found for unfollow');
               await addPrevUnfollowedUser({ username, time: new Date().getTime(), noActionTaken: true });
               await sleep(3000);
             } else {
@@ -722,7 +878,25 @@ const Instauto = async (db, browser, options) => {
       }
     }
 
+    logger.log('Done with unfollowing', i, j);
+
     return j;
+  }
+
+  async function safelyFollowUserList({ users, skipPrivate, limit }) {
+    logger.log('Following users, up to limit', limit);
+
+    for (const username of users) {
+      await throttle();
+
+      try {
+        await followUserRespectingRestrictions({ username, skipPrivate });
+      } catch (err) {
+        logger.error(`Failed to follow user ${username}, continuing`, err);
+        await takeScreenshot();
+        await sleep(20000);
+      }
+    }
   }
 
   function getPage() {
@@ -742,7 +916,7 @@ const Instauto = async (db, browser, options) => {
 
   if (enableCookies) await tryLoadCookies();
 
-  const goHome = async () => page.goto(`${instagramBaseUrl}/?hl=en`);
+  const goHome = async () => gotoUrl(`${instagramBaseUrl}/?hl=en`);
 
   // https://github.com/mifi/SimpleInstaBot/issues/28
   async function setLang(short, long, assumeLoggedIn = false) {
@@ -754,7 +928,7 @@ const Instauto = async (db, browser, options) => {
       // when logged in, we need to go to account in order to be able to check/set language
       // (need to see the footer)
       if (assumeLoggedIn) {
-        await page.goto(`${instagramBaseUrl}/accounts/edit/`);
+        await gotoUrl(`${instagramBaseUrl}/accounts/edit/`);
       } else {
         await goHome();
       }
@@ -819,6 +993,19 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
+  async function tryClickLogin() {
+    async function tryClickButton(xpath) {
+      const btn = (await page.$x(xpath))[0];
+      if (!btn) return false;
+      await btn.click();
+      return true;
+    }
+
+    if (await tryClickButton("//button[.//text() = 'Log In']")) return true;
+    if (await tryClickButton("//button[.//text() = 'Log in']")) return true; // https://github.com/mifi/instauto/pull/110 https://github.com/mifi/instauto/issues/109
+    return false;
+  }
+
   await setEnglishLang(false);
 
   await tryPressButton(await page.$x('//button[contains(text(), "Accept")]'), 'Accept cookies dialog');
@@ -847,16 +1034,13 @@ const Instauto = async (db, browser, options) => {
     await sleep(1000);
 
     for (;;) {
-      const loginButton = (await page.$x("//button[.//text() = 'Log In']"))[0];
-      if (loginButton) {
-        await loginButton.click();
-        break;
-      }
+      const didClickLogin = await tryClickLogin();
+      if (didClickLogin) break;
       logger.warn('Login button not found. Maybe you can help me click it? And also report an issue on github with a screenshot of what you\'re seeing :)');
       await sleep(6000);
     }
 
-    await sleep(6000);
+    await sleepFixed(10000);
 
     // Sometimes login button gets stuck with a spinner
     // https://github.com/mifi/SimpleInstaBot/issues/25
@@ -903,16 +1087,14 @@ const Instauto = async (db, browser, options) => {
     throw new Error('Don\'t know what\'s my username');
   }
 
-  const myUserData = await navigateToUserAndGetData(myUsername);
-  const myUserId = myUserData.id;
+  const { id: myUserId } = await navigateToUserAndGetData(myUsername);
 
   // --- END OF INITIALIZATION
 
   async function doesUserFollowMe(username) {
     try {
       logger.info('Checking if user', username, 'follows us');
-      const userData = await navigateToUserAndGetData(username);
-      const userId = userData.id;
+      const { id: userId } = await navigateToUserAndGetData(username);
 
       const elementHandles = await page.$x("//a[contains(.,' following')][contains(@href,'/following')]");
       if (elementHandles.length === 0) throw new Error('Following button not found');
@@ -961,7 +1143,7 @@ const Instauto = async (db, browser, options) => {
       return followsMe === false;
     }
 
-    await safelyUnfollowUserList(allFollowingGenerator, limit, condition);
+    return safelyUnfollowUserList(allFollowingGenerator, limit, condition);
   }
 
   async function unfollowAllUnknown({ limit } = {}) {
@@ -978,7 +1160,7 @@ const Instauto = async (db, browser, options) => {
       return true;
     }
 
-    await safelyUnfollowUserList(unfollowUsersGenerator, limit, condition);
+    return safelyUnfollowUserList(unfollowUsersGenerator, limit, condition);
   }
 
   async function unfollowOldFollowed({ ageInDays, limit } = {}) {
@@ -992,9 +1174,9 @@ const Instauto = async (db, browser, options) => {
     });
 
     function condition(username) {
-      return getPrevFollowedUser(username) &&
-        !excludeUsers.includes(username) &&
-        (new Date().getTime() - getPrevFollowedUser(username).time) / (1000 * 60 * 60 * 24) > ageInDays;
+      return getPrevFollowedUser(username)
+        && !excludeUsers.includes(username)
+        && (new Date().getTime() - getPrevFollowedUser(username).time) / (1000 * 60 * 60 * 24) > ageInDays;
     }
 
     return safelyUnfollowUserList(followingUsersGenerator, limit, condition);
@@ -1006,12 +1188,11 @@ const Instauto = async (db, browser, options) => {
       getFollowers: false,
     });
 
-    return allFollowing.filter(u =>
-      !getPrevFollowedUser(u) && !excludeUsers.includes(u));
+    return allFollowing.filter(u => !getPrevFollowedUser(u) && !excludeUsers.includes(u));
   }
 
   return {
-    followUserFollowers,
+    followUserFollowers: processUserFollowers,
     unfollowNonMutualFollowers,
     unfollowAllUnknown,
     unfollowOldFollowed,
@@ -1023,9 +1204,11 @@ const Instauto = async (db, browser, options) => {
     getFollowersOrFollowing,
     getUsersWhoLikedContent,
     safelyUnfollowUserList,
+    safelyFollowUserList,
     getPage,
-    followUsersFollowers,
+    followUsersFollowers: processUsersFollowers,
     doesUserFollowMe,
+    navigateToUserAndGetData,
   };
 };
 

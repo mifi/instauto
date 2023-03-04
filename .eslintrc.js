@@ -1,22 +1,25 @@
-{
-  "env": {
-    "node": true
+module.exports = {
+  env: {
+    node: true,
   },
-  "extends": "airbnb/base",
-  "parserOptions": {
-    "sourceType": "script",
-    "ecmaVersion": 2022
+  extends: 'airbnb-base',
+  parserOptions: {
+    sourceType: 'script',
+    ecmaVersion: 2022,
   },
-  "globals": {
-    "window": true,
-    "document": true
+  globals: {
+    window: true,
+    document: true,
   },
-  "rules": {
-    "max-len": 0,
-    "arrow-parens": 0,
-    "no-console": 0,
-    "no-await-in-loop": 0,
-    "object-curly-newline": 0,
+  rules: {
+    'max-len': 0,
+    'arrow-parens': 0,
+    'no-console': 0,
+    'no-await-in-loop': 0,
+    'object-curly-newline': 0,
+    'no-promise-executor-return': 0,
+    strict: 0,
+    'no-multiple-empty-lines': ['error', { max: 2, maxBOF: 0, maxEOF: 0 }],
     'no-restricted-syntax': [
       'error',
       {
@@ -32,5 +35,5 @@
         message: '`with` is disallowed in strict mode because it makes code impossible to predict and optimize.',
       },
     ],
-  }
-}
+  },
+};
