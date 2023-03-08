@@ -2,7 +2,9 @@
 
 const puppeteer = require('puppeteer'); // eslint-disable-line import/no-extraneous-dependencies
 
-const Instauto = require('instauto'); // eslint-disable-line import/no-unresolved
+const Instauto = require('.');
+// or:
+// const Instauto = require('instauto'); // eslint-disable-line import/no-unresolved
 
 // Optional: Custom logger with timestamps
 const log = (fn, ...args) => console[fn](new Date().toISOString(), ...args);
