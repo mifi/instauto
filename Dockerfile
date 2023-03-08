@@ -7,4 +7,6 @@ WORKDIR /app/instauto
 
 COPY . /app/instauto
 
-CMD ["yarn"]
+RUN yarn
+
+CMD ["node", "/app/instauto/example.js"]
