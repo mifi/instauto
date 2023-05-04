@@ -48,13 +48,13 @@ declare function Instauto(db: any, browser: any, options: any): Promise<{
     }) => Promise<void>;
     getPage: () => any;
     followUsersFollowers: ({ usersToFollowFollowersOf, maxFollowsTotal, skipPrivate, enableFollow, enableLikeImages, likeImagesMin, likeImagesMax, }: {
-        usersToFollowFollowersOf: any[];
-        maxFollowsTotal: number;
+        usersToFollowFollowersOf: string[];
+        maxFollowsTotal?: number;
         skipPrivate: boolean;
-        enableFollow: boolean;
-        enableLikeImages: boolean;
-        likeImagesMin: number;
-        likeImagesMax: number;
+        enableFollow?: boolean;
+        enableLikeImages?: boolean;
+        likeImagesMin?: number;
+        likeImagesMax?: number;
     }) => Promise<void>;
     doesUserFollowMe: (username: string) => Promise<boolean | undefined>;
     navigateToUserAndGetData: (username: string) => any;
