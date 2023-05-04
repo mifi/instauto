@@ -928,6 +928,18 @@ const Instauto = async (db, browser, options) => {
     return true;
   }
 
+  /**
+   * @async
+   * @function
+   * @param {string} username
+   * @param {Object} options
+   * @param {string} options.maxFollowsPerUser
+   * @param {boolean} options.skipPrivate
+   * @param {boolean} options.enableLikeImages
+   * @param {number} options.likeImagesMin
+   * @param {number} options.likeImagesMax
+   * @returns {Promise<void>}
+   */
   async function processUserFollowers(
     username,
     {
