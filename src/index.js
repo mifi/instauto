@@ -1185,6 +1185,15 @@ const Instauto = async (db, browser, options) => {
     return j;
   }
 
+  /**
+   * @async
+   * @function
+   * @param {Object} options
+   * @param {any[]} options.users
+   * @param {boolean} options.skipPrivate
+   * @param {number} options.limit
+   * @returns {Promise<void>}
+   */
   async function safelyFollowUserList({ users, skipPrivate, limit }) {
     logger.log('Following users, up to limit', limit);
 
