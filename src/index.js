@@ -490,6 +490,13 @@ const Instauto = async (db, browser, options) => {
     return elementHandles[0];
   }
 
+  /**
+   * @async
+   * @function
+   * @param {string} username
+   * @throws {Error}
+   * @returns {Promise<void>}
+   */
   async function followUser(username) {
     await navigateToUserAndGetData(username);
     const elementHandle = await findFollowButton();
