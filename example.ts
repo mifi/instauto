@@ -1,4 +1,4 @@
-import puppeteer from 'puppeteer';
+import puppeteer, { Browser } from 'puppeteer';
 import Instauto from '.';
 
 // Optional: Custom logger with timestamps
@@ -88,12 +88,12 @@ const options = {
 };
 
 (async () => {
-  let browser;
+  let browser: Browser;
 
   try {
     browser = await puppeteer.launch({
       // set headless: false first if you need to debug and see how it works
-      headless: true,
+      headless: true, // true is deprecated use "new" instead
 
       args: [
         // Needed for docker
@@ -157,6 +157,6 @@ const options = {
     console.error(err);
   } finally {
     console.log('Closing browser');
-    if (browser) await browser.close();
+    if (browser!) await browser.close();
   }
 })();
