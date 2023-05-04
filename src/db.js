@@ -16,8 +16,14 @@ module.exports = async ({
 
   async function trySaveDb() {
     try {
-      await fs.writeFile(followedDbPath, JSON.stringify(Object.values(prevFollowedUsers)));
-      await fs.writeFile(unfollowedDbPath, JSON.stringify(Object.values(prevUnfollowedUsers)));
+      await fs.writeFile(
+        followedDbPath,
+        JSON.stringify(Object.values(prevFollowedUsers))
+      );
+      await fs.writeFile(
+        unfollowedDbPath,
+        JSON.stringify(Object.values(prevUnfollowedUsers))
+      );
       await fs.writeFile(likedPhotosDbPath, JSON.stringify(prevLikedPhotos));
     } catch (err) {
       logger.error('Failed to save database');
@@ -26,12 +32,18 @@ module.exports = async ({
 
   async function tryLoadDb() {
     try {
-      prevFollowedUsers = keyBy(JSON.parse(await fs.readFile(followedDbPath)), 'username');
+      prevFollowedUsers = keyBy(
+        JSON.parse(await fs.readFile(followedDbPath)),
+        'username'
+      );
     } catch (err) {
       logger.warn('No followed database found');
     }
     try {
-      prevUnfollowedUsers = keyBy(JSON.parse(await fs.readFile(unfollowedDbPath)), 'username');
+      prevUnfollowedUsers = keyBy(
+        JSON.parse(await fs.readFile(unfollowedDbPath)),
+        'username'
+      );
     } catch (err) {
       logger.warn('No unfollowed database found');
     }
@@ -52,7 +64,7 @@ module.exports = async ({
 
   function getLikedPhotosLastTimeUnit(timeUnit) {
     const now = new Date().getTime();
-    return getPrevLikedPhotos().filter(u => now - u.time < timeUnit);
+    return getPrevLikedPhotos().filter((u) => now - u.time < timeUnit);
   }
 
   async function addLikedPhoto({ username, href, time }) {
@@ -68,10 +80,9 @@ module.exports = async ({
     return getPrevFollowedUsers().length; // TODO performance
   }
 
-
   function getFollowedLastTimeUnit(timeUnit) {
     const now = new Date().getTime();
-    return getPrevFollowedUsers().filter(u => now - u.time < timeUnit);
+    return getPrevFollowedUsers().filter((u) => now - u.time < timeUnit);
   }
 
   function getPrevFollowedUser(username) {
@@ -93,7 +104,7 @@ module.exports = async ({
 
   function getUnfollowedLastTimeUnit(timeUnit) {
     const now = new Date().getTime();
-    return getPrevUnfollowedUsers().filter(u => now - u.time < timeUnit);
+    return getPrevUnfollowedUsers().filter((u) => now - u.time < timeUnit);
   }
 
   async function addPrevUnfollowedUser(user) {
