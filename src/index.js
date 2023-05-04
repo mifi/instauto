@@ -1464,6 +1464,13 @@ const Instauto = async (db, browser, options) => {
     return safelyUnfollowUserList(allFollowingGenerator, limit, condition);
   }
 
+  /**
+   * @async
+   * @function
+   * @param {Object} options
+   * @param {number} options.limit
+   * @returns {Promise<number>}
+   */
   async function unfollowAllUnknown({ limit } = {}) {
     logger.log('Unfollowing all except excludes and auto followed');
 
