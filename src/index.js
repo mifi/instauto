@@ -1108,6 +1108,14 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
+  /**
+   * @async
+   * @function
+   * @param {any[]} usersToUnfollow
+   * @param {number} limit
+   * @param {() => boolean} condition
+   * @returns {Promise<number>}
+   */
   async function safelyUnfollowUserList(
     usersToUnfollow,
     limit,
