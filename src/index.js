@@ -144,6 +144,14 @@ const Instauto = async (db, browser, options) => {
 
   const sleepFixed = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  /**
+   * Sleep promise with random duration
+   * @async
+   * @function
+   * @param {number} ms - initial duration in milliseconds
+   * @param {number} deviation
+   * @returns {any}
+   */
   const sleep = (ms, deviation = 1) => {
     let msWithDev = (Math.random() * deviation + 1) * ms;
     if (dryRun) msWithDev = Math.min(3000, msWithDev); // for dryRun, no need to wait so long
