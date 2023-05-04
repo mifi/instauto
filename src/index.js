@@ -1210,6 +1210,10 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
+  /**
+   * @function
+   * @returns {any}
+   */
   function getPage() {
     return page;
   }
