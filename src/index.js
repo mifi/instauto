@@ -666,8 +666,8 @@ const Instauto = async (db, browser, options) => {
    * @function
    * @param {Object} options
    * @param {any} options.userId
-   * @todo specify the type of options.userId and users
    * @param {boolean} options.getFollowers
+   * @todo specify the type of options.userId and users
    * @returns {Promise<any>}
    */
   async function getFollowersOrFollowing({ userId, getFollowers = false }) {
@@ -687,7 +687,7 @@ const Instauto = async (db, browser, options) => {
    * @param {Object} options
    * @param {any} options.contentId
    * @todo get the type of options.contentId
-   * @returns {Promise<{any, any, any}>}
+   * @returns {Promise<{queryHash: any, getResponseProp: any, graphqlVariables: any}>}
    */
   function getUsersWhoLikedContent({ contentId }) {
     return graphqlQueryUsers({
