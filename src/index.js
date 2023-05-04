@@ -1429,6 +1429,13 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
+  /**
+   * @async
+   * @function
+   * @param {Object} options
+   * @param {number} options.limit
+   * @returns {Promise<number>}
+   */
   async function unfollowNonMutualFollowers({ limit } = {}) {
     logger.log(`Unfollowing non-mutual followers (limit ${limit})...`);
 
