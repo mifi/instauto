@@ -815,6 +815,15 @@ const Instauto = async (db, browser, options) => {
   }
   /* eslint-enable no-undef */
 
+  /**
+   * @async
+   * @function
+   * @param {Object} options
+   * @param {string} options.username
+   * @param {number} options.likeImagesMin
+   * @param {number} options.likeImagesMax
+   * @returns {Promise<void>}
+   */
   async function likeUserImages({
     username,
     likeImagesMin,
