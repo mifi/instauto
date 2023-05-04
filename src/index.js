@@ -1488,6 +1488,14 @@ const Instauto = async (db, browser, options) => {
     return safelyUnfollowUserList(unfollowUsersGenerator, limit, condition);
   }
 
+  /**
+   * @async
+   * @function
+   * @param {Object} options
+   * @param {number} options.ageInDays
+   * @param {number} options.limit
+   * @returns {Promise<number>}
+   */
   async function unfollowOldFollowed({ ageInDays, limit } = {}) {
     assert(ageInDays);
 
