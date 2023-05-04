@@ -675,6 +675,14 @@ const Instauto = async (db, browser, options) => {
     return users;
   }
 
+  /**
+   * @async
+   * @function
+   * @param {Object} options
+   * @param {any} options.contentId
+   * @todo get the type of options.contentId
+   * @returns {Promise<{any, any, any}>}
+   */
   function getUsersWhoLikedContent({ contentId }) {
     return graphqlQueryUsers({
       getResponseProp: (json) => json.data.shortcode_media.edge_liked_by,
