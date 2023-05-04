@@ -539,6 +539,13 @@ const Instauto = async (db, browser, options) => {
 
   // See https://github.com/timgrossmann/InstaPy/pull/2345
   // https://github.com/timgrossmann/InstaPy/issues/2355
+  /**
+   * @async
+   * @function
+   * @param {string} username
+   * @throws {Error}
+   * @returns {Promise<{string, number}>}
+   */
   async function unfollowUser(username) {
     await navigateToUserAndGetData(username);
     logger.log(`Unfollowing user ${username}`);
