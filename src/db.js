@@ -3,6 +3,17 @@
 const fs = require('fs-extra');
 const keyBy = require('lodash/keyBy');
 
+/**
+ * Creates a module that provides functions to manage the bot's database.
+ * @async
+ * @function
+ * @param {Object} options - An object with the following properties:
+ * @param {string} options.followedDbPath - The path to the followed database.
+ * @param {string} options.unfollowedDbPath - The path to the unfollowed database.
+ * @param {string} options.likedPhotosDbPath - The path to the liked photos database.
+ * @param {Object} [options.logger=console] - An optional logger object.
+ * @returns {Promise<void>}
+ */
 module.exports = async ({
   followedDbPath,
   unfollowedDbPath,
