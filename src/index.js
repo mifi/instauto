@@ -1473,6 +1473,12 @@ const Instauto = async (db, browser, options) => {
 
   // --- END OF INITIALIZATION
 
+  /**
+   * @async
+   * @function
+   * @param {string} username
+   * @returns {Promise<boolean | undefined>}
+   */
   async function doesUserFollowMe(username) {
     try {
       logger.info('Checking if user', username, 'follows us');
