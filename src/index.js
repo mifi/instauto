@@ -655,6 +655,15 @@ const Instauto = async (db, browser, options) => {
     });
   }
 
+  /**
+   * @async
+   * @function
+   * @param {Object} options
+   * @param {any} options.userId
+   * @todo specify the type of options.userId and users
+   * @param {boolean} options.getFollowers
+   * @returns {Promise<any>}
+   */
   async function getFollowersOrFollowing({ userId, getFollowers = false }) {
     let users = [];
     for await (const usersBatch of getFollowersOrFollowingGenerator({
