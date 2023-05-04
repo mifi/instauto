@@ -286,6 +286,12 @@ const Instauto = async (db, browser, options) => {
     if (!(await navigateToUser(username))) throw new Error('User not found');
   }
 
+  /**
+   * @async
+   * @function
+   * @param {string} username
+   * @returns {any}
+   */
   async function navigateToUserAndGetData(username) {
     const cachedUserData = userDataCache[username];
 
