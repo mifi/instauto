@@ -1057,6 +1057,19 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
+  /**
+   * @async
+   * @function
+   * @param {Object} options
+   * @param {any[]} options.usersToFollowFollowersOf
+   * @param {number} options.maxFollowsTotal
+   * @param {boolean} options.skipPrivate
+   * @param {boolean} options.enableFollow
+   * @param {boolean} options.enableLikeImages
+   * @param {number} options.likeImagesMin
+   * @param {number} options.likeImagesMax
+   * @returns {Promise<void>}
+   */
   async function processUsersFollowers({
     usersToFollowFollowersOf,
     maxFollowsTotal = 150,
