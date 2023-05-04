@@ -1552,6 +1552,11 @@ const Instauto = async (db, browser, options) => {
     return safelyUnfollowUserList(followingUsersGenerator, limit, condition);
   }
 
+  /**
+   * @async
+   * @function
+   * @returns {Promise<any[]>}
+   */
   async function listManuallyFollowedUsers() {
     const allFollowing = await getFollowersOrFollowing({
       userId: myUserId,
