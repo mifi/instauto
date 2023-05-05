@@ -45,6 +45,7 @@ const Instauto = async (db, browser, options) => {
     maxFollowsPerHour = 20,
     maxFollowsPerDay = 150,
 
+    maxLikesPerHour = 7,
     maxLikesPerDay = 50,
 
     followUserRatioMin = 0.2,
@@ -194,10 +195,18 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
+  async function checkReachedLikedUserHourLimit() {
+    if (getNumLikesThisTimeUnit(hourMs) >= maxLikesPerHour) {
+      logger.log('Have reached hourly like rate limit, pausing 10 min');
+      await sleep(10 * 60 * 1000);
+    }
+  }
+
   async function throttle() {
     await checkReachedFollowedUserDayLimit();
     await checkReachedFollowedUserHourLimit();
     await checkReachedLikedUserDayLimit();
+    await checkReachedLikedUserHourLimit();
   }
 
   function haveRecentlyFollowedUser(username) {
@@ -1442,6 +1451,7 @@ const Instauto = async (db, browser, options) => {
       dayMs,
     )} in the last 24 hours`,
   );
+  logger.log(`Have liked ${getNumLikesThisTimeUnit(hourMs)} images in the last hour`);
   logger.log(
     `Have liked ${getNumLikesThisTimeUnit(dayMs)} images in the last 24 hours`,
   );

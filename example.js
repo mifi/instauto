@@ -22,6 +22,7 @@ const options = {
   maxFollowsPerDay: process.env.MAX_FOLLOWS_PER_DAY != null ? parseInt(process.env.MAX_FOLLOWS_PER_DAY, 10) : 150,
   // (NOTE setting the above parameters too high will cause temp ban/throttle)
 
+  maxLikesPerHour: process.env.MAX_LIKES_PER_HOUR != null ? parseInt(process.env.MAX_LIKES_PER_HOUR, 10) : 5,
   maxLikesPerDay: process.env.MAX_LIKES_PER_DAY != null ? parseInt(process.env.MAX_LIKES_PER_DAY, 10) : 30,
 
   // Don't follow users that have a followers / following ratio less than this:
