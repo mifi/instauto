@@ -1,14 +1,14 @@
-'use strict';
-
-const puppeteer = require('puppeteer'); // eslint-disable-line import/no-extraneous-dependencies
-
-const Instauto = require('.');
-// or:
-// const Instauto = require('instauto'); // eslint-disable-line import/no-unresolved
+import puppeteer, { Browser } from 'puppeteer';
+import Instauto from '.';
 
 // Optional: Custom logger with timestamps
 const log = (fn, ...args) => console[fn](new Date().toISOString(), ...args);
-const logger = Object.fromEntries(['log', 'info', 'debug', 'error', 'trace', 'warn'].map((fn) => [fn, (...args) => log(fn, ...args)]));
+const logger = Object.fromEntries(
+  ['log', 'info', 'debug', 'error', 'trace', 'warn'].map((fn) => [
+    fn,
+    (...args) => log(fn, ...args),
+  ])
+);
 
 const options = {
   cookiesPath: './cookies.json',
@@ -17,18 +17,37 @@ const options = {
   password: process.env.INSTAGRAM_PASSWORD,
 
   // Global limit that prevents follow or unfollows (total) to exceed this number over a sliding window of one hour:
-  maxFollowsPerHour: process.env.MAX_FOLLOWS_PER_HOUR != null ? parseInt(process.env.MAX_FOLLOWS_PER_HOUR, 10) : 20,
+  maxFollowsPerHour:
+    process.env.MAX_FOLLOWS_PER_HOUR != null
+      ? parseInt(process.env.MAX_FOLLOWS_PER_HOUR, 10)
+      : 20,
   // Global limit that prevents follow or unfollows (total) to exceed this number over a sliding window of one day:
-  maxFollowsPerDay: process.env.MAX_FOLLOWS_PER_DAY != null ? parseInt(process.env.MAX_FOLLOWS_PER_DAY, 10) : 150,
+  maxFollowsPerDay:
+    process.env.MAX_FOLLOWS_PER_DAY != null
+      ? parseInt(process.env.MAX_FOLLOWS_PER_DAY, 10)
+      : 150,
   // (NOTE setting the above parameters too high will cause temp ban/throttle)
 
-  maxLikesPerHour: process.env.MAX_LIKES_PER_HOUR != null ? parseInt(process.env.MAX_LIKES_PER_HOUR, 10) : 5,
-  maxLikesPerDay: process.env.MAX_LIKES_PER_DAY != null ? parseInt(process.env.MAX_LIKES_PER_DAY, 10) : 30,
+  maxLikesPerHour:
+    process.env.MAX_LIKES_PER_HOUR != null
+      ? parseInt(process.env.MAX_LIKES_PER_HOUR, 10)
+      : 5,
+
+  maxLikesPerDay:
+    process.env.MAX_LIKES_PER_DAY != null
+      ? parseInt(process.env.MAX_LIKES_PER_DAY, 10)
+      : 30,
 
   // Don't follow users that have a followers / following ratio less than this:
-  followUserRatioMin: process.env.FOLLOW_USER_RATIO_MIN != null ? parseFloat(process.env.FOLLOW_USER_RATIO_MIN) : 0.2,
+  followUserRatioMin:
+    process.env.FOLLOW_USER_RATIO_MIN != null
+      ? parseFloat(process.env.FOLLOW_USER_RATIO_MIN)
+      : 0.2,
   // Don't follow users that have a followers / following ratio higher than this:
-  followUserRatioMax: process.env.FOLLOW_USER_RATIO_MAX != null ? parseFloat(process.env.FOLLOW_USER_RATIO_MAX) : 4.0,
+  followUserRatioMax:
+    process.env.FOLLOW_USER_RATIO_MAX != null
+      ? parseFloat(process.env.FOLLOW_USER_RATIO_MAX)
+      : 4.0,
   // Don't follow users who have more followers than this:
   followUserMaxFollowers: null,
   // Don't follow users who have more people following them than this:
@@ -74,12 +93,12 @@ const options = {
 };
 
 (async () => {
-  let browser;
+  let browser: Browser;
 
   try {
     browser = await puppeteer.launch({
       // set headless: false first if you need to debug and see how it works
-      headless: true,
+      headless: true, // true is deprecated use "new" instead
 
       args: [
         // Needed for docker
@@ -112,12 +131,18 @@ const options = {
     // Unfollow previously auto-followed users (regardless of whether or not they are following us back)
     // after a certain amount of days (2 weeks)
     // Leave room to do following after this too (unfollow 2/3 of maxFollowsPerDay)
-    const unfollowedCount = await instauto.unfollowOldFollowed({ ageInDays: 14, limit: options.maxFollowsPerDay * (2 / 3) });
+    const unfollowedCount = await instauto.unfollowOldFollowed({
+      ageInDays: 14,
+      limit: options.maxFollowsPerDay * (2 / 3),
+    });
 
     if (unfollowedCount > 0) await instauto.sleep(10 * 60 * 1000);
 
     // List of usernames that we should follow the followers of, can be celebrities etc.
-    const usersToFollowFollowersOf = process.env.USERS_TO_FOLLOW != null ? process.env.USERS_TO_FOLLOW.split(',') : [];
+    const usersToFollowFollowersOf =
+      process.env.USERS_TO_FOLLOW != null
+        ? process.env.USERS_TO_FOLLOW.split(',')
+        : [];
 
     // Now go through each of these and follow a certain amount of their followers
     await instauto.followUsersFollowers({
@@ -137,6 +162,6 @@ const options = {
     console.error(err);
   } finally {
     console.log('Closing browser');
-    if (browser) await browser.close();
+    if (browser!) await browser.close();
   }
 })();
