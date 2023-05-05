@@ -29,11 +29,11 @@ module.exports = async ({
     try {
       await fs.writeFile(
         followedDbPath,
-        JSON.stringify(Object.values(prevFollowedUsers))
+        JSON.stringify(Object.values(prevFollowedUsers)),
       );
       await fs.writeFile(
         unfollowedDbPath,
-        JSON.stringify(Object.values(prevUnfollowedUsers))
+        JSON.stringify(Object.values(prevUnfollowedUsers)),
       );
       await fs.writeFile(likedPhotosDbPath, JSON.stringify(prevLikedPhotos));
     } catch (err) {
@@ -45,7 +45,7 @@ module.exports = async ({
     try {
       prevFollowedUsers = keyBy(
         JSON.parse(await fs.readFile(followedDbPath)),
-        'username'
+        'username',
       );
     } catch (err) {
       logger.warn('No followed database found');
@@ -53,7 +53,7 @@ module.exports = async ({
     try {
       prevUnfollowedUsers = keyBy(
         JSON.parse(await fs.readFile(unfollowedDbPath)),
-        'username'
+        'username',
       );
     } catch (err) {
       logger.warn('No unfollowed database found');

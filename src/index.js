@@ -77,7 +77,7 @@ const Instauto = async (db, browser, options) => {
 
   assert(
     maxFollowsPerHour * botWorkShiftHours >= maxFollowsPerDay,
-    'Max follows per hour too low compared to max follows per day'
+    'Max follows per hour too low compared to max follows per day',
   );
 
   const {
@@ -90,8 +90,7 @@ const Instauto = async (db, browser, options) => {
     addLikedPhoto,
   } = db;
 
-  const getNumLikesThisTimeUnit = (time) =>
-    getLikedPhotosLastTimeUnit(time).length;
+  const getNumLikesThisTimeUnit = (time) => getLikedPhotosLastTimeUnit(time).length;
 
   // State
   let page;
@@ -167,9 +166,9 @@ const Instauto = async (db, browser, options) => {
     const now = new Date().getTime();
 
     return (
-      getPrevFollowedUsers().filter((u) => now - u.time < timeUnit).length +
-      getPrevUnfollowedUsers().filter(
-        (u) => !u.noActionTaken && now - u.time < timeUnit
+      getPrevFollowedUsers().filter((u) => now - u.time < timeUnit).length
+      + getPrevUnfollowedUsers().filter(
+        (u) => !u.noActionTaken && now - u.time < timeUnit,
       ).length
     );
   }
@@ -205,14 +204,13 @@ const Instauto = async (db, browser, options) => {
     const followedUserEntry = getPrevFollowedUser(username);
     if (!followedUserEntry) return false; // We did not previously follow this user, so don't know
     return (
-      new Date().getTime() - followedUserEntry.time <
-      dontUnfollowUntilTimeElapsed
+      new Date().getTime() - followedUserEntry.time
+      < dontUnfollowUntilTimeElapsed
     );
   }
 
   // See https://github.com/mifi/SimpleInstaBot/issues/140#issuecomment-1149105387
-  const gotoUrl = async (url) =>
-    page.goto(url, { waitUntil: ['load', 'domcontentloaded', 'networkidle0'] });
+  const gotoUrl = async (url) => page.goto(url, { waitUntil: ['load', 'domcontentloaded', 'networkidle0'] });
 
   async function gotoWithRetry(url) {
     const maxAttempts = 3;
@@ -229,21 +227,21 @@ const Instauto = async (db, browser, options) => {
 
       if (attempt > maxAttempts) {
         throw new Error(
-          `Navigate to user failed after ${maxAttempts} attempts, last status: ${status}`
+          `Navigate to user failed after ${maxAttempts} attempts, last status: ${status}`,
         );
       }
 
       logger.info(`Got ${status} - Retrying request later...`);
-      if (status === 429)
+      if (status === 429) {
         logger.warn(
-          "429 Too Many Requests could mean that Instagram suspects you're using a bot. You could try to use the Instagram Mobile app from the same IP for a few days first"
+          "429 Too Many Requests could mean that Instagram suspects you're using a bot. You could try to use the Instagram Mobile app from the same IP for a few days first",
         );
+      }
       await sleep((attempt + 1) * 30 * 60 * 1000);
     }
   }
 
-  const getUserPageUrl = (username) =>
-    `${instagramBaseUrl}/${encodeURIComponent(username)}`;
+  const getUserPageUrl = (username) => `${instagramBaseUrl}/${encodeURIComponent(username)}`;
 
   function isAlreadyOnUserPage(username) {
     const url = getUserPageUrl(username);
@@ -271,11 +269,10 @@ const Instauto = async (db, browser, options) => {
       // example: https://www.instagram.com/victorialarson__/
       // so we check if the page has the user's name on it
       const elementHandles = await page.$x(
-        `//body//main//*[contains(text(),${escapeXpathStr(username)})]`
+        `//body//main//*[contains(text(),${escapeXpathStr(username)})]`,
       );
       const foundUsernameOnPage = elementHandles.length > 0;
-      if (!foundUsernameOnPage)
-        logger.warn(`Cannot find text "${username}" on page`);
+      if (!foundUsernameOnPage) { logger.warn(`Cannot find text "${username}" on page`); }
       return foundUsernameOnPage;
     }
 
@@ -327,7 +324,7 @@ const Instauto = async (db, browser, options) => {
         }
       } catch (err) {
         logger.warn(
-          `Unable to get user data from page (${err.name}) - This is normal`
+          `Unable to get user data from page (${err.name}) - This is normal`,
         );
       }
       return undefined;
@@ -343,13 +340,13 @@ const Instauto = async (db, browser, options) => {
           await page.evaluate(async (username2) => {
             const response = await window.fetch(
               `https://i.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(
-                username2.toLowerCase()
+                username2.toLowerCase(),
               )}`,
               {
                 mode: 'cors',
                 credentials: 'include',
                 headers: { 'x-ig-app-id': '936619743392459' },
-              }
+              },
             );
             await response.json(); // else it will not finish the request
           }, username);
@@ -366,15 +363,15 @@ const Instauto = async (db, browser, options) => {
             (response) => {
               const request = response.request();
               return (
-                request.method() === 'GET' &&
-                new RegExp(
+                request.method() === 'GET'
+                && new RegExp(
                   `https:\\/\\/i\\.instagram\\.com\\/api\\/v1\\/users\\/web_profile_info\\/\\?username=${encodeURIComponent(
-                    username.toLowerCase()
-                  )}`
+                    username.toLowerCase(),
+                  )}`,
                 ).test(request.url())
               );
             },
-            { timeout: 30000 }
+            { timeout: 30000 },
           ),
           navigateToUserWithCheck(username),
           // page.waitForNavigation({ waitUntil: 'networkidle0' }),
@@ -410,15 +407,13 @@ const Instauto = async (db, browser, options) => {
 
   async function getPageJson() {
     return JSON.parse(
-      await (await (await page.$('pre')).getProperty('textContent')).jsonValue()
+      await (await (await page.$('pre')).getProperty('textContent')).jsonValue(),
     );
   }
 
   async function isActionBlocked() {
-    if ((await page.$x('//*[contains(text(), "Action Blocked")]')).length > 0)
-      return true;
-    if ((await page.$x('//*[contains(text(), "Try Again Later")]')).length > 0)
-      return true;
+    if ((await page.$x('//*[contains(text(), "Action Blocked")]')).length > 0) { return true; }
+    if ((await page.$x('//*[contains(text(), "Try Again Later")]')).length > 0) { return true; }
     return false;
   }
 
@@ -442,7 +437,7 @@ const Instauto = async (db, browser, options) => {
     // https://sqa.stackexchange.com/questions/36918/xpath-text-buy-now-is-working-but-not-containstext-buy-now
     // https://github.com/mifi/SimpleInstaBot/issues/106
     let elementHandles = await page.$x(
-      `//header//button[contains(.,'${text}')]`
+      `//header//button[contains(.,'${text}')]`,
     );
     if (elementHandles.length > 0) return elementHandles[0];
 
@@ -471,22 +466,22 @@ const Instauto = async (db, browser, options) => {
     if (button) return button;
 
     let elementHandles = await page.$x(
-      "//header//button[*//span[@aria-label='Following']]"
+      "//header//button[*//span[@aria-label='Following']]",
     );
     if (elementHandles.length > 0) return elementHandles[0];
 
     elementHandles = await page.$x(
-      "//header//button[*//span[@aria-label='Requested']]"
+      "//header//button[*//span[@aria-label='Requested']]",
     );
     if (elementHandles.length > 0) return elementHandles[0];
 
     elementHandles = await page.$x(
-      "//header//button[*//*[name()='svg'][@aria-label='Following']]"
+      "//header//button[*//*[name()='svg'][@aria-label='Following']]",
     );
     if (elementHandles.length > 0) return elementHandles[0];
 
     elementHandles = await page.$x(
-      "//header//button[*//*[name()='svg'][@aria-label='Requested']]"
+      "//header//button[*//*[name()='svg'][@aria-label='Requested']]",
     );
     if (elementHandles.length > 0) return elementHandles[0];
 
@@ -499,7 +494,7 @@ const Instauto = async (db, browser, options) => {
 
     // https://github.com/mifi/SimpleInstaBot/issues/191
     elementHandles = await page.$x(
-      "//*[@role='button'][contains(.,'Unfollow')]"
+      "//*[@role='button'][contains(.,'Unfollow')]",
     );
     return elementHandles[0];
   }
@@ -590,8 +585,7 @@ const Instauto = async (db, browser, options) => {
         await checkActionBlocked();
 
         const elementHandle2 = await findFollowButton();
-        if (!elementHandle2)
-          throw new Error('Unfollow button did not change state');
+        if (!elementHandle2) { throw new Error('Unfollow button did not change state'); }
       }
 
       await addPrevUnfollowedUser(res);
@@ -602,8 +596,7 @@ const Instauto = async (db, browser, options) => {
     return res;
   }
 
-  const isLoggedIn = async () =>
-    (await page.$x('//*[@aria-label="Home"]')).length === 1;
+  const isLoggedIn = async () => (await page.$x('//*[@aria-label="Home"]')).length === 1;
 
   async function* graphqlQueryUsers({
     queryHash,
@@ -652,8 +645,7 @@ const Instauto = async (db, browser, options) => {
 
   function getFollowersOrFollowingGenerator({ userId, getFollowers = false }) {
     return graphqlQueryUsers({
-      getResponseProp: (json) =>
-        json.data.user[getFollowers ? 'edge_followed_by' : 'edge_follow'],
+      getResponseProp: (json) => json.data.user[getFollowers ? 'edge_followed_by' : 'edge_follow'],
       graphqlVariables: { id: userId },
       queryHash: getFollowers
         ? '37479f2b8209594dde7facb0d904896a'
@@ -708,7 +700,7 @@ const Instauto = async (db, browser, options) => {
     shouldLikeMedia: shouldLikeMediaIn,
   }) {
     const allImages = Array.from(document.getElementsByTagName('a')).filter(
-      (el) => /instagram.com\/p\//.test(el.href)
+      (el) => /instagram.com\/p\//.test(el.href),
     );
 
     // eslint-disable-next-line no-shadow
@@ -724,7 +716,7 @@ const Instauto = async (db, browser, options) => {
     const imagesShuffled = shuffleArray(allImages);
 
     const numImagesToLike = Math.floor(
-      Math.random() * (likeImagesMax + 1 - likeImagesMin) + likeImagesMin
+      Math.random() * (likeImagesMax + 1 - likeImagesMin) + likeImagesMin,
     );
 
     instautoLog(`Liking ${numImagesToLike} image(s)`);
@@ -746,19 +738,17 @@ const Instauto = async (db, browser, options) => {
       if (!dialog) throw new Error('Dialog not found');
 
       const section = Array.from(dialog.querySelectorAll('section')).find(
-        (s) =>
-          s.querySelectorAll('*[aria-label="Like"]')[0] &&
-          s.querySelectorAll('*[aria-label="Comment"]')[0]
+        (s) => s.querySelectorAll('*[aria-label="Like"]')[0]
+          && s.querySelectorAll('*[aria-label="Comment"]')[0],
       );
 
       if (!section) throw new Error('Like button section not found');
 
       const likeButtonChild = section.querySelectorAll(
-        '*[aria-label="Like"]'
+        '*[aria-label="Like"]',
       )[0];
 
-      if (!likeButtonChild)
-        throw new Error('Like button not found (aria-label)');
+      if (!likeButtonChild) { throw new Error('Like button not found (aria-label)'); }
 
       // eslint-disable-next-line no-inner-declarations
       function findClickableParent(el) {
@@ -781,16 +771,16 @@ const Instauto = async (db, browser, options) => {
       // eslint-disable-next-line no-inner-declarations
       function likeImage() {
         if (
-          shouldLikeMediaIn !== null &&
-          typeof shouldLikeMediaIn === 'function'
+          shouldLikeMediaIn !== null
+          && typeof shouldLikeMediaIn === 'function'
         ) {
           const presentation = dialog.querySelector(
-            'article[role=presentation]'
+            'article[role=presentation]',
           );
           const img = presentation.querySelector('img[alt^="Photo by "]');
           const video = presentation.querySelector('video[type="video/mp4"]');
           const mediaDesc = presentation.querySelector(
-            '[role=menuitem] h2 ~ div'
+            '[role=menuitem] h2 ~ div',
           ).textContent;
           let mediaType;
           let src;
@@ -810,7 +800,7 @@ const Instauto = async (db, browser, options) => {
 
           if (!shouldLikeMediaIn({ mediaType, mediaDesc, src, alt, poster })) {
             instautoLog2(
-              `shouldLikeMedia returned false for ${image.href}, skipping`
+              `shouldLikeMedia returned false for ${image.href}, skipping`,
             );
             return;
           }
@@ -827,11 +817,10 @@ const Instauto = async (db, browser, options) => {
       await window.instautoSleep(3000);
 
       const closeButtonChild = document.querySelector(
-        'svg[aria-label="Close"]'
+        'svg[aria-label="Close"]',
       );
 
-      if (!closeButtonChild)
-        throw new Error('Close button not found (aria-label)');
+      if (!closeButtonChild) { throw new Error('Close button not found (aria-label)'); }
 
       const closeButton = findClickableParent(closeButtonChild);
 
@@ -861,24 +850,19 @@ const Instauto = async (db, browser, options) => {
     likeImagesMax,
   } = {}) {
     if (
-      !likeImagesMin ||
-      !likeImagesMax ||
-      likeImagesMax < likeImagesMin ||
-      likeImagesMin < 1
-    )
-      throw new Error('Invalid arguments');
+      !likeImagesMin
+      || !likeImagesMax
+      || likeImagesMax < likeImagesMin
+      || likeImagesMin < 1
+    ) { throw new Error('Invalid arguments'); }
 
     await navigateToUserAndGetData(username);
 
     logger.log(`Liking ${likeImagesMin}-${likeImagesMax} user images`);
     try {
       await page.exposeFunction('instautoSleep', sleep);
-      await page.exposeFunction('instautoLog', (...args) =>
-        console.log(...args)
-      );
-      await page.exposeFunction('instautoOnImageLiked', (href) =>
-        onImageLiked({ username, href })
-      );
+      await page.exposeFunction('instautoLog', (...args) => console.log(...args));
+      await page.exposeFunction('instautoOnImageLiked', (href) => onImageLiked({ username, href }));
     } catch (err) {
       // Ignore already exists error
     }
@@ -926,36 +910,36 @@ const Instauto = async (db, browser, options) => {
       return false;
     }
     if (
-      (followUserMaxFollowers != null &&
-        followedByCount > followUserMaxFollowers) ||
-      (followUserMaxFollowing != null &&
-        followsCount > followUserMaxFollowing) ||
-      (followUserMinFollowers != null &&
-        followedByCount < followUserMinFollowers) ||
-      (followUserMinFollowing != null && followsCount < followUserMinFollowing)
+      (followUserMaxFollowers != null
+        && followedByCount > followUserMaxFollowers)
+      || (followUserMaxFollowing != null
+        && followsCount > followUserMaxFollowing)
+      || (followUserMinFollowers != null
+        && followedByCount < followUserMinFollowers)
+      || (followUserMinFollowing != null && followsCount < followUserMinFollowing)
     ) {
       logger.log(
         'User has too many or too few followers or following, skipping.',
         'followedByCount:',
         followedByCount,
         'followsCount:',
-        followsCount
+        followsCount,
       );
       return false;
     }
     if (
-      (followUserRatioMax != null && ratio > followUserRatioMax) ||
-      (followUserRatioMin != null && ratio < followUserRatioMin)
+      (followUserRatioMax != null && ratio > followUserRatioMax)
+      || (followUserRatioMin != null && ratio < followUserRatioMin)
     ) {
       logger.log(
-        'User has too many followers compared to follows or opposite, skipping'
+        'User has too many followers compared to follows or opposite, skipping',
       );
       return false;
     }
     if (
-      shouldFollowUser !== null &&
-      typeof shouldFollowUser === 'function' &&
-      !shouldFollowUser({
+      shouldFollowUser !== null
+      && typeof shouldFollowUser === 'function'
+      && !shouldFollowUser({
         username,
         isVerified,
         isBusinessAccount,
@@ -969,7 +953,7 @@ const Instauto = async (db, browser, options) => {
       }) === true
     ) {
       logger.log(
-        `Custom follow logic returned false for ${username}, skipping`
+        `Custom follow logic returned false for ${username}, skipping`,
       );
       return false;
     }
@@ -1002,18 +986,20 @@ const Instauto = async (db, browser, options) => {
       enableLikeImages,
       likeImagesMin,
       likeImagesMax,
-    } = {}
+    } = {},
   ) {
     const enableFollow = maxFollowsPerUser > 0;
 
-    if (enableFollow)
+    if (enableFollow) {
       logger.log(
-        `Following up to ${maxFollowsPerUser} followers of ${username}`
+        `Following up to ${maxFollowsPerUser} followers of ${username}`,
       );
-    if (enableLikeImages)
+    }
+    if (enableLikeImages) {
       logger.log(
-        `Liking images of up to ${likeImagesMax} followers of ${username}`
+        `Liking images of up to ${likeImagesMax} followers of ${username}`,
       );
+    }
 
     await throttle();
 
@@ -1037,11 +1023,12 @@ const Instauto = async (db, browser, options) => {
           }
 
           let didActuallyFollow = false;
-          if (enableFollow)
+          if (enableFollow) {
             didActuallyFollow = await followUserRespectingRestrictions({
               username: follower,
               skipPrivate,
             });
+          }
           if (didActuallyFollow) numFollowedForThisUser += 1;
 
           const didFailToFollow = enableFollow && !didActuallyFollow;
@@ -1087,17 +1074,16 @@ const Instauto = async (db, browser, options) => {
   }) {
     // If maxFollowsTotal turns out to be lower than the user list size, slice off the user list
     const usersToFollowFollowersOfSliced = shuffleArray(
-      usersToFollowFollowersOf
+      usersToFollowFollowersOf,
     ).slice(0, maxFollowsTotal);
 
-    const maxFollowsPerUser =
-      enableFollow && usersToFollowFollowersOfSliced.length > 0
-        ? Math.floor(maxFollowsTotal / usersToFollowFollowersOfSliced.length)
-        : 0;
+    const maxFollowsPerUser = enableFollow && usersToFollowFollowersOfSliced.length > 0
+      ? Math.floor(maxFollowsTotal / usersToFollowFollowersOfSliced.length)
+      : 0;
 
     if (
-      maxFollowsPerUser === 0 &&
-      (!enableLikeImages || likeImagesMin < 1 || likeImagesMax < 1)
+      maxFollowsPerUser === 0
+      && (!enableLikeImages || likeImagesMin < 1 || likeImagesMax < 1)
     ) {
       logger.warn('Nothing to follow or like');
       return;
@@ -1119,7 +1105,7 @@ const Instauto = async (db, browser, options) => {
         logger.error(
           'Failed to process user followers, continuing',
           username,
-          err
+          err,
         );
         await takeScreenshot();
         await sleep(60 * 1000);
@@ -1138,7 +1124,7 @@ const Instauto = async (db, browser, options) => {
   async function safelyUnfollowUserList(
     usersToUnfollow,
     limit,
-    condition = () => true
+    condition = () => true,
   ) {
     logger.log('Unfollowing users, up to limit', limit);
 
@@ -1176,7 +1162,7 @@ const Instauto = async (db, browser, options) => {
 
                 if (j % 10 === 0) {
                   logger.log(
-                    'Have unfollowed 10 users since last break. Taking a break'
+                    'Have unfollowed 10 users since last break. Taking a break',
                   );
                   await sleep(10 * 60 * 1000, 0.1);
                 }
@@ -1268,17 +1254,16 @@ const Instauto = async (db, browser, options) => {
       }
       await sleep(3000);
       const elementHandles = await page.$x(
-        `//select[//option[@value='${short}' and text()='${long}']]`
+        `//select[//option[@value='${short}' and text()='${long}']]`,
       );
-      if (elementHandles.length < 1)
-        throw new Error('Language selector not found');
+      if (elementHandles.length < 1) { throw new Error('Language selector not found'); }
       logger.log('Found language selector');
 
       // https://stackoverflow.com/questions/45864516/how-to-select-an-option-from-dropdown-select
       const alreadyEnglish = await page.evaluate(
         (selectElem, short2) => {
           const optionElem = selectElem.querySelector(
-            `option[value='${short2}']`
+            `option[value='${short2}']`,
           );
           if (optionElem.selected) return true; // already selected?
           optionElem.selected = true;
@@ -1288,7 +1273,7 @@ const Instauto = async (db, browser, options) => {
           return false;
         },
         elementHandles[0],
-        short
+        short,
       );
 
       if (alreadyEnglish) {
@@ -1321,8 +1306,7 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
-  const setEnglishLang = async (assumeLoggedIn) =>
-    setLang('en', 'English', assumeLoggedIn);
+  const setEnglishLang = async (assumeLoggedIn) => setLang('en', 'English', assumeLoggedIn);
   // const setEnglishLang = async (assumeLoggedIn) => setLang('de', 'Deutsch', assumeLoggedIn);
 
   async function tryPressButton(elementHandles, name, sleepMs = 3000) {
@@ -1354,26 +1338,26 @@ const Instauto = async (db, browser, options) => {
 
   await tryPressButton(
     await page.$x('//button[contains(text(), "Accept")]'),
-    'Accept cookies dialog'
+    'Accept cookies dialog',
   );
   await tryPressButton(
     await page.$x('//button[contains(text(), "Only allow essential cookies")]'),
     'Accept cookies dialog 2 button 1',
-    10000
+    10000,
   );
   await tryPressButton(
     await page.$x(
-      '//button[contains(text(), "Allow essential and optional cookies")]'
+      '//button[contains(text(), "Allow essential and optional cookies")]',
     ),
     'Accept cookies dialog 2 button 2',
-    10000
+    10000,
   );
 
   if (!(await isLoggedIn())) {
     if (!myUsername || !password) {
       await tryDeleteCookies();
       throw new Error(
-        'No longer logged in. Deleting cookies and aborting. Need to provide username/password'
+        'No longer logged in. Deleting cookies and aborting. Need to provide username/password',
       );
     }
 
@@ -1387,7 +1371,7 @@ const Instauto = async (db, browser, options) => {
     // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
     await tryPressButton(
       await page.$x('//button[contains(text(), "Log In")]'),
-      'Login form button'
+      'Login form button',
     );
 
     await page.type('input[name="username"]', myUsername, { delay: 50 });
@@ -1399,7 +1383,7 @@ const Instauto = async (db, browser, options) => {
       const didClickLogin = await tryClickLogin();
       if (didClickLogin) break;
       logger.warn(
-        "Login button not found. Maybe you can help me click it? And also report an issue on github with a screenshot of what you're seeing :)"
+        "Login button not found. Maybe you can help me click it? And also report an issue on github with a screenshot of what you're seeing :)",
       );
       await sleep(6000);
     }
@@ -1416,10 +1400,11 @@ const Instauto = async (db, browser, options) => {
 
     let warnedAboutLoginFail = false;
     while (!(await isLoggedIn())) {
-      if (!warnedAboutLoginFail)
+      if (!warnedAboutLoginFail) {
         logger.warn(
-          'WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process, or if really logged in, click the Instagram logo in the top left to go to the Home page.'
+          'WARNING: Login has not succeeded. This could be because of an incorrect username/password, or a "suspicious login attempt"-message. You need to manually complete the process, or if really logged in, click the Instagram logo in the top left to go to the Home page.',
         );
+      }
       warnedAboutLoginFail = true;
       await sleep(5000);
     }
@@ -1431,40 +1416,40 @@ const Instauto = async (db, browser, options) => {
     // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
     await tryPressButton(
       await page.$x('//button[contains(text(), "Save Info")]'),
-      'Login info dialog: Save Info'
+      'Login info dialog: Save Info',
     );
     // May sometimes be "Save info" too? https://github.com/mifi/instauto/pull/70
     await tryPressButton(
       await page.$x('//button[contains(text(), "Save info")]'),
-      'Login info dialog: Save info'
+      'Login info dialog: Save info',
     );
   }
 
   await tryPressButton(
     await page.$x('//button[contains(text(), "Not Now")]'),
-    'Turn on Notifications dialog'
+    'Turn on Notifications dialog',
   );
 
   await trySaveCookies();
 
   logger.log(
     `Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(
-      hourMs
-    )} in the last hour`
+      hourMs,
+    )} in the last hour`,
   );
   logger.log(
     `Have followed/unfollowed ${getNumFollowedUsersThisTimeUnit(
-      dayMs
-    )} in the last 24 hours`
+      dayMs,
+    )} in the last 24 hours`,
   );
   logger.log(
-    `Have liked ${getNumLikesThisTimeUnit(dayMs)} images in the last 24 hours`
+    `Have liked ${getNumLikesThisTimeUnit(dayMs)} images in the last 24 hours`,
   );
 
   try {
-    // eslint-disable-next-line no-underscore-dangle
     const detectedUsername = await page.evaluate(
-      () => window._sharedData.config.viewer.username
+      // eslint-disable-next-line no-underscore-dangle
+      () => window._sharedData.config.viewer.username,
     );
     if (detectedUsername) myUsername = detectedUsername;
   } catch (err) {
@@ -1491,18 +1476,17 @@ const Instauto = async (db, browser, options) => {
       const { id: userId } = await navigateToUserAndGetData(username);
 
       const elementHandles = await page.$x(
-        "//a[contains(.,' following')][contains(@href,'/following')]"
+        "//a[contains(.,' following')][contains(@href,'/following')]",
       );
-      if (elementHandles.length === 0)
-        throw new Error('Following button not found');
+      if (elementHandles.length === 0) { throw new Error('Following button not found'); }
 
       const [foundResponse] = await Promise.all([
         page.waitForResponse((response) => {
           const request = response.request();
           return (
-            request.method() === 'GET' &&
-            new RegExp(
-              `instagram.com/api/v1/friendships/${userId}/following/`
+            request.method() === 'GET'
+            && new RegExp(
+              `instagram.com/api/v1/friendships/${userId}/following/`,
             ).test(request.url())
           );
         }),
@@ -1514,8 +1498,7 @@ const Instauto = async (db, browser, options) => {
       if (users.length < 2) throw new Error('Unable to find user follows list');
       // console.log(users, myUserId);
       return users.some(
-        (user) =>
-          String(user.pk) === String(myUserId) || user.username === myUsername
+        (user) => String(user.pk) === String(myUserId) || user.username === myUsername,
       ); // If they follow us, we will show at the top of the list
     } catch (err) {
       logger.error('Failed to check if user follows us', err);
@@ -1594,7 +1577,7 @@ const Instauto = async (db, browser, options) => {
     assert(ageInDays);
 
     logger.log(
-      `Unfollowing currently followed users who were auto-followed more than ${ageInDays} days ago (limit ${limit})...`
+      `Unfollowing currently followed users who were auto-followed more than ${ageInDays} days ago (limit ${limit})...`,
     );
 
     const followingUsersGenerator = getFollowersOrFollowingGenerator({
@@ -1604,11 +1587,11 @@ const Instauto = async (db, browser, options) => {
 
     function condition(username) {
       return (
-        getPrevFollowedUser(username) &&
-        !excludeUsers.includes(username) &&
-        (new Date().getTime() - getPrevFollowedUser(username).time) /
-          (1000 * 60 * 60 * 24) >
-          ageInDays
+        getPrevFollowedUser(username)
+        && !excludeUsers.includes(username)
+        && (new Date().getTime() - getPrevFollowedUser(username).time)
+          / (1000 * 60 * 60 * 24)
+          > ageInDays
       );
     }
 
@@ -1627,7 +1610,7 @@ const Instauto = async (db, browser, options) => {
     });
 
     return allFollowing.filter(
-      (u) => !getPrevFollowedUser(u) && !excludeUsers.includes(u)
+      (u) => !getPrevFollowedUser(u) && !excludeUsers.includes(u),
     );
   }
 
