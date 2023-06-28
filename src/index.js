@@ -1190,6 +1190,65 @@ const Instauto = async (db, browser, options) => {
 
     return allFollowing.filter(u => !getPrevFollowedUser(u) && !excludeUsers.includes(u));
   }
+ 
+  /**
+    * @brief View the first unviewed story of "username"
+    * @param username: the username of the user to view the story of 
+    * @return true on success, false on failure
+    *
+    **/
+  async function viewStory(username) {
+    await navigateToUserWithCheck(username);
+    let story = await page.$x('//div[@class="_aarf _aarg" and contains(@role, "button")]');
+
+    if (!story[0]) {
+      console.log("The user has no stories");
+      return false;
+    }
+
+    logger.log(`Viewing a story of ${username}`);
+
+    await story[0].click();
+    await sleep(4000);
+    return true;
+  } 
+  
+  /**
+    * @brief Tries to view a story on every iteration. Usernames of profiles to use can be provided in an array, if it is null or empty, usernames are scraped from username's followers
+    * @param username: username to get  followers from (otional)
+    * @param arrayOfUsers: array of usernames of users to view stories of (optional)
+    * @param iteration: number of usernames to be processed 
+    * @return updated users or void 
+    *
+    **/
+  async function processUserForStories(username, users, iterations) {
+    if (!users) {
+      const { id: userId } = await navigateToUserAndGetData(username);
+
+      for await (const followersBatch of getFollowersOrFollowingGenerator({ userId, getFollowers: true })) {
+        logger.log('User followers batch', followersBatch);
+      
+        for (const follower of followersBatch) {
+          await viewStory(follower);
+	
+	        iterations--;
+	
+	        if (iterations == 0) return;
+        }
+      }
+    } else {
+      for (const user of users) {
+        await viewStory(user);
+	
+        iterations--;
+        user.shift();
+	
+        if (iterations == 0) break;
+      }
+
+      return users;
+    }
+  } 
 
   return {
     followUserFollowers: processUserFollowers,
@@ -1209,6 +1268,7 @@ const Instauto = async (db, browser, options) => {
     followUsersFollowers: processUsersFollowers,
     doesUserFollowMe,
     navigateToUserAndGetData,
+    processUserForStories: viewUsersStories,
   };
 };
 
