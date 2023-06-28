@@ -129,6 +129,13 @@ const options = {
 
     await instauto.sleep(10 * 60 * 1000);
 
+    // Example
+    await instauto.viewUsersStories("a_user", null, 10);
+    // Or
+    await instauto.viewUsersStories(null, ["user1","user2","user3"], 3);
+    
+    await instauto.sleep(10 * 60 * 1000);
+
     console.log('Done running');
 
     await instauto.sleep(30000);
