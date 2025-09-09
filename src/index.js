@@ -199,7 +199,7 @@ const Instauto = async (db, browser, options) => {
       if (![560, 429].includes(status)) return status;
 
       if (attempt > maxAttempts) {
-        throw new Error(`Navigate to user failed after ${maxAttempts} attempts, last status: ${status}`);
+        throw new Error(`Maps to user failed after ${maxAttempts} attempts, last status: ${status}`);
       }
 
       logger.info(`Got ${status} - Retrying request later...`);
@@ -241,7 +241,7 @@ const Instauto = async (db, browser, options) => {
       return foundUsernameOnPage;
     }
 
-    throw new Error(`Navigate to user failed with status ${status}`);
+    throw new Error(`Maps to user failed with status ${status}`);
   }
 
   async function navigateToUserWithCheck(username) {
@@ -709,7 +709,7 @@ const Instauto = async (db, browser, options) => {
     await page.evaluate(likeCurrentUserImagesPageCode, { dryRun, likeImagesMin, likeImagesMax, shouldLikeMedia });
   }
 
-  async function followUserRespectingRestrictions({ username, skipPrivate = false }) {
+  async function followUserRespectingRestrictions({ username, skipPrivate = false, followOnlyPrivate = false }) {
     if (getPrevFollowedUser(username)) {
       logger.log('Skipping already followed user', username);
       return false;
@@ -723,7 +723,12 @@ const Instauto = async (db, browser, options) => {
 
     const ratio = followedByCount / (followsCount || 1);
 
-    if (isPrivate && skipPrivate) {
+    if (followOnlyPrivate) {
+      if (!isPrivate) {
+        logger.log('User is public, skipping because only-private is enabled');
+        return false;
+      }
+    } else if (isPrivate && skipPrivate) {
       logger.log('User is private, skipping');
       return false;
     }
@@ -757,7 +762,7 @@ const Instauto = async (db, browser, options) => {
   }
 
   async function processUserFollowers(username, {
-    maxFollowsPerUser = 5, skipPrivate = false, enableLikeImages, likeImagesMin, likeImagesMax,
+    maxFollowsPerUser = 5, skipPrivate = false, followOnlyPrivate = false, enableLikeImages, likeImagesMin, likeImagesMax,
   } = {}) {
     const enableFollow = maxFollowsPerUser > 0;
 
@@ -783,7 +788,7 @@ const Instauto = async (db, browser, options) => {
           }
 
           let didActuallyFollow = false;
-          if (enableFollow) didActuallyFollow = await followUserRespectingRestrictions({ username: follower, skipPrivate });
+          if (enableFollow) didActuallyFollow = await followUserRespectingRestrictions({ username: follower, skipPrivate, followOnlyPrivate });
           if (didActuallyFollow) numFollowedForThisUser += 1;
 
           const didFailToFollow = enableFollow && !didActuallyFollow;
@@ -801,7 +806,7 @@ const Instauto = async (db, browser, options) => {
     }
   }
 
-  async function processUsersFollowers({ usersToFollowFollowersOf, maxFollowsTotal = 150, skipPrivate, enableFollow = true, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
+  async function processUsersFollowers({ usersToFollowFollowersOf, maxFollowsTotal = 150, skipPrivate, followOnlyPrivate, enableFollow = true, enableLikeImages = false, likeImagesMin = 1, likeImagesMax = 2 }) {
     // If maxFollowsTotal turns out to be lower than the user list size, slice off the user list
     const usersToFollowFollowersOfSliced = shuffleArray(usersToFollowFollowersOf).slice(0, maxFollowsTotal);
 
@@ -814,7 +819,7 @@ const Instauto = async (db, browser, options) => {
 
     for (const username of usersToFollowFollowersOfSliced) {
       try {
-        await processUserFollowers(username, { maxFollowsPerUser, skipPrivate, enableLikeImages, likeImagesMin, likeImagesMax });
+        await processUserFollowers(username, { maxFollowsPerUser, skipPrivate, followOnlyPrivate, enableLikeImages, likeImagesMin, likeImagesMax });
 
         await sleep(10 * 60 * 1000);
         await throttle();
@@ -883,14 +888,14 @@ const Instauto = async (db, browser, options) => {
     return j;
   }
 
-  async function safelyFollowUserList({ users, skipPrivate, limit }) {
+  async function safelyFollowUserList({ users, skipPrivate, followOnlyPrivate, limit }) {
     logger.log('Following users, up to limit', limit);
 
     for (const username of users) {
       await throttle();
 
       try {
-        await followUserRespectingRestrictions({ username, skipPrivate });
+        await followUserRespectingRestrictions({ username, skipPrivate, followOnlyPrivate });
       } catch (err) {
         logger.error(`Failed to follow user ${username}, continuing`, err);
         await takeScreenshot();
