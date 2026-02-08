@@ -1256,12 +1256,20 @@ function Instauto(db: JSONDBInstance, page: Page, options: InstautoOptions): Ins
       // Mobile version https://github.com/mifi/SimpleInstaBot/issues/7
       await tryPressButton(await getXpathElement('//button[contains(text(), "Log In")]', { timeout: 1000 }), 'Login form button');
 
-      await page.type('input[name="email"]', myUsername, { delay: 50 });
+      // Instagram changed their login form - the input fields no longer have name attributes
+      // We need to use type selectors instead
+      const usernameInput = await page.waitForSelector('input[type="text"]', { timeout: 5000 });
+      if (!usernameInput) throw new Error('Username input field not found');
+      await usernameInput.type(myUsername, { delay: 50 });
       await sleep(1000);
-      await page.type('input[name="pass"]', password, { delay: 50 });
+      
+      const passwordInput = await page.waitForSelector('input[type="password"]', { timeout: 5000 });
+      if (!passwordInput) throw new Error('Password input field not found');
+      await passwordInput.type(password, { delay: 50 });
       await sleep(500);
+      
       // Focus password field and press Enter to submit login
-      await page.focus('input[name="pass"]');
+      await passwordInput.focus();
       await page.keyboard.press('Enter');
 
       await sleepFixed(10000);
